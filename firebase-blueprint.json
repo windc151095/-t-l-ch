@@ -37,6 +37,18 @@
         "slotDuration": { "type": "number", "default": 30 },
         "password": { "type": "string", "description": "Master password for override" }
       }
+    },
+    "DayConfig": {
+      "title": "Day Configuration",
+      "description": "Specific settings for a particular day.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "morningActive": { "type": "boolean" },
+        "afternoonActive": { "type": "boolean" },
+        "duration": { "type": "number" }
+      },
+      "required": ["date", "morningActive", "afternoonActive", "duration"]
     }
   },
   "firestore": {
@@ -51,6 +63,10 @@
     "/settings/global": {
       "schema": "Settings",
       "description": "Global settings."
+    },
+    "/dayConfigs/{dateStr}": {
+      "schema": "DayConfig",
+      "description": "Day specific configurations."
     }
   }
 }
