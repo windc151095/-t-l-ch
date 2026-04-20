@@ -209,7 +209,8 @@ export default function App() {
     const qApps = query(collection(db, 'appointments'), where('date', '==', dateStr));
     const unsubApps = onSnapshot(qApps, (snapshot) => {
       const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
-      setAppointments(apps.filter(app => (app as any).status !== 'cancelled'));
+      // Store all for admin to see cancelled, but filter for view
+      setAppointments(apps);
     });
 
     // Fetch Locked Slots
@@ -293,12 +294,18 @@ export default function App() {
     }
   };
 
-  const handleCancelAppointment = async () => {
+  const handleCancelAppointment = async (permanent: boolean = false) => {
     if (!manageAppointment) return;
     setIsManaging(true);
     try {
       if (isAdmin) {
-        await deleteDoc(doc(db, 'appointments', manageAppointment.id));
+        if (permanent) {
+          await deleteDoc(doc(db, 'appointments', manageAppointment.id));
+        } else {
+          await updateDoc(doc(db, 'appointments', manageAppointment.id), {
+            status: 'cancelled'
+          });
+        }
       } else {
         if (managePassword !== (manageAppointment as any).password) {
           alert("Sai Mã PIN!");
@@ -306,8 +313,7 @@ export default function App() {
         }
 
         await updateDoc(doc(db, 'appointments', manageAppointment.id), {
-          status: 'cancelled',
-          password: managePassword 
+          status: 'cancelled'
         });
       }
       setShowManageModal(false);
@@ -455,18 +461,18 @@ export default function App() {
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="text-left px-6 py-3 bg-yellow-400/10 rounded-2xl border border-yellow-200">
-                      <p className="text-sm font-black text-amber-950 leading-tight">{appointments.length} phiên</p>
+                      <p className="text-sm font-black text-amber-950 leading-tight">{appointments.filter(a => (a as any).status !== 'cancelled').length} phiên</p>
                       <p className="text-[10px] text-yellow-700 uppercase font-bold tracking-widest">Đã đặt chỗ</p>
                     </div>
                     <div className="text-left px-6 py-3 bg-slate-50 rounded-2xl border border-slate-100">
-                      <p className="text-sm font-black text-slate-900 leading-tight">{slots.length - appointments.length - lockedSlots.length} slot</p>
+                      <p className="text-sm font-black text-slate-900 leading-tight">{slots.length - appointments.filter(a => (a as any).status !== 'cancelled').length - lockedSlots.length} slot</p>
                       <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Còn trống</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {appointments.length === 0 ? (
+                  {appointments.filter(a => (a as any).status !== 'cancelled').length === 0 ? (
                     <div className="col-span-full py-12 border-2 border-dashed border-yellow-100 rounded-3xl flex flex-col items-center justify-center text-center">
                        <div className="w-12 h-12 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-300 mb-4 animate-pulse">
                          <CalendarDays size={24} />
@@ -474,18 +480,30 @@ export default function App() {
                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Hiện chưa có ai đặt lịch</p>
                     </div>
                   ) : (
-                    appointments.sort((a,b) => a.startTime.localeCompare(b.startTime)).map((app) => (
-                      <div key={app.id} className="bg-slate-50/50 p-4 rounded-2xl border border-white shadow-sm hover:border-yellow-300 hover:bg-yellow-50 transition-all flex items-start gap-4">
-                        <div className="px-3 py-2 bg-yellow-400 text-amber-950 rounded-xl font-mono text-sm font-black shadow-lg shadow-yellow-200 shrink-0">
-                          {app.startTime}
+                    appointments.filter(a => (a as any).status !== 'cancelled').sort((a,b) => a.startTime.localeCompare(b.startTime)).map((app) => (
+                      <div key={app.id} className="bg-slate-50/50 p-4 rounded-2xl border border-white shadow-sm hover:border-yellow-300 hover:bg-yellow-50 transition-all flex items-start justify-between gap-4 group">
+                        <div className="flex items-start gap-4 overflow-hidden">
+                          <div className="px-3 py-2 bg-yellow-400 text-amber-950 rounded-xl font-mono text-sm font-black shadow-lg shadow-yellow-200 shrink-0">
+                            {app.startTime}
+                          </div>
+                          <div className="overflow-hidden">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Người đặt</p>
+                            <h5 className="font-bold text-slate-900 truncate leading-tight">{app.clientName}</h5>
+                            <p className="text-[10px] text-yellow-600 font-bold uppercase tracking-wider flex items-center gap-1 mt-1">
+                              {app.guide}
+                            </p>
+                          </div>
                         </div>
-                        <div className="overflow-hidden">
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Người đặt</p>
-                          <h5 className="font-bold text-slate-900 truncate leading-tight">{app.clientName}</h5>
-                          <p className="text-[10px] text-yellow-600 font-bold uppercase tracking-wider flex items-center gap-1 mt-1">
-                            {app.guide}
-                          </p>
-                        </div>
+                        <button 
+                          onClick={() => {
+                            setManageAppointment(app);
+                            setShowManageModal(true);
+                          }}
+                          className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                          title="Hủy lịch hẹn"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     ))
                   )}
@@ -573,7 +591,7 @@ export default function App() {
                         </div>
                         <div className="grid grid-cols-3 gap-2">
                           {rangeSlots.map((slot) => {
-                            const appointment = appointments.find(app => app.startTime === slot);
+                            const appointment = appointments.filter(a => (a as any).status !== 'cancelled').find(app => app.startTime === slot);
                             const isLocked = lockedSlots.find(l => l.startTime === slot);
                             const isSelected = selectedSlot === slot;
                             const isSlotPast = isToday(selectedDate) && parse(format(new Date(), 'HH:mm'), 'HH:mm', new Date()) > parse(slot, 'HH:mm', new Date());
@@ -908,14 +926,17 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 gap-2">
-                {appointments.length === 0 ? (
-                  <div className="bg-white rounded-xl p-24 border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
+                <div className="flex items-center justify-between mb-2 mt-6">
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Loạt lịch hẹn đang hoạt động</h3>
+                  <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-md">ACTIVE</span>
+                </div>
+                {appointments.filter(a => (a as any).status !== 'cancelled').length === 0 ? (
+                  <div className="bg-white rounded-xl p-16 border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
                     <CalendarDays size={48} className="text-slate-200 mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900">Không có bản đặt lịch nào</h3>
-                    <p className="text-slate-400 text-sm mt-1">Sử dụng giao diện đặt lịch bên ngoài để tạo cuộc hẹn.</p>
                   </div>
                 ) : (
-                  [...appointments].sort((a, b) => a.startTime.localeCompare(b.startTime)).map((app) => (
+                  [...appointments].filter(a => (a as any).status !== 'cancelled').sort((a, b) => a.startTime.localeCompare(b.startTime)).map((app) => (
                     <div key={app.id} className="bg-white p-4 rounded-xl border border-yellow-100 flex items-center justify-between group hover:border-yellow-300 transition-all shadow-sm border-l-4 border-l-yellow-400">
                       <div className="flex items-center gap-6">
                         <div className="w-14 text-center shrink-0">
@@ -934,27 +955,76 @@ export default function App() {
                             <span className="text-[11px] font-medium italic line-clamp-1">
                               Q: {app.question}
                             </span>
-                            <span className="text-[11px] font-medium flex items-center gap-1">
-                              <Lock size={12} />
-                              PIN: {(app as any).password}
-                            </span>
                           </div>
                         </div>
                       </div>
                       
-                      <button 
-                        onClick={() => {
-                          setManageAppointment(app);
-                          setShowManageModal(true);
-                        }}
-                        className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                        title="Đặt lịch kết nối"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => {
+                            setManageAppointment(app);
+                            setShowManageModal(true);
+                          }}
+                          className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                          title="Xóa lịch hẹn"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
+
+                {/* Cancelled List for Admin */}
+                {(() => {
+                  const cancelledApps = appointments.filter(a => (a as any).status === 'cancelled');
+                  if (cancelledApps.length === 0) return null;
+                  return (
+                    <>
+                      <div className="flex items-center justify-between mb-2 mt-12">
+                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Loạt lịch hẹn đã gỡ bỏ</h3>
+                        <span className="px-2 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded-md">CANCELLED</span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 opacity-60">
+                        {cancelledApps.sort((a,b) => a.startTime.localeCompare(b.startTime)).map((app) => (
+                          <div key={app.id} className="bg-slate-50 p-4 rounded-xl border border-dashed border-slate-200 flex items-center justify-between transition-all">
+                            <div className="flex items-center gap-6">
+                              <div className="w-14 text-center shrink-0">
+                                <span className="text-lg font-bold text-slate-400 leading-none">{app.startTime}</span>
+                              </div>
+                              <div className="h-8 w-px bg-slate-200" />
+                              <div className="line-through text-slate-400">
+                                <h4 className="font-semibold">{app.clientName}</h4>
+                                <span className="text-[10px] font-medium italic">Q: {app.question}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                               <button 
+                                onClick={async () => {
+                                  await updateDoc(doc(db, 'appointments', app.id), { status: 'active' });
+                                }}
+                                className="px-3 py-1 bg-yellow-400 text-amber-950 font-bold text-[10px] rounded-lg hover:bg-yellow-300 transition-all"
+                               >
+                                KHÔI PHỤC
+                               </button>
+                               <button 
+                                onClick={async () => {
+                                  if (confirm("Xóa vĩnh viễn lịch hẹn này? Thao tác này không thể hoàn tác.")) {
+                                    await deleteDoc(doc(db, 'appointments', app.id));
+                                  }
+                                }}
+                                className="p-2 text-slate-300 hover:text-red-500 transition-all"
+                                title="Xóa vĩnh viễn"
+                               >
+                                <Trash2 size={16} />
+                               </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </motion.div>
           )}
@@ -1007,13 +1077,32 @@ export default function App() {
                   </div>
                 )}
                 
-                <button 
-                  onClick={handleCancelAppointment}
-                  disabled={isManaging || (!isAdmin && !managePassword)}
-                  className="w-full py-3.5 bg-red-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-red-200 hover:bg-red-600 transition-all active:scale-[0.98] disabled:opacity-50"
-                >
-                  {isManaging ? 'Đang thực hiện...' : isAdmin ? 'Gỡ bỏ lịch hẹn' : 'Hủy lịch hẹn này'}
-                </button>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => handleCancelAppointment(false)}
+                    disabled={isManaging || (!isAdmin && !managePassword)}
+                    className={cn(
+                      "flex-1 py-3.5 bg-red-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-red-200 hover:bg-red-600 transition-all active:scale-[0.98] disabled:opacity-50",
+                      isAdmin && "bg-slate-800 shadow-slate-200 hover:bg-slate-900"
+                    )}
+                  >
+                    {isManaging ? 'Đang thực hiện...' : isAdmin ? 'Gỡ bỏ (Lưu lại)' : 'Hủy lịch hẹn này'}
+                  </button>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => {
+                        if (confirm("Bạn có chắc chắn muốn xóa vĩnh viễn?")) {
+                          handleCancelAppointment(true);
+                        }
+                      }}
+                      disabled={isManaging}
+                      className="px-4 py-3.5 bg-red-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-red-200 hover:bg-red-700 transition-all active:scale-[0.98]"
+                      title="Xóa vĩnh viễn"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
               </div>
             </motion.div>
           </div>
