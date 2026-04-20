@@ -362,12 +362,30 @@ export default function App() {
             <CalendarIcon size={18} />
           </div>
           <div>
-            <h1 className="font-bold text-lg tracking-tight text-slate-900">Quản Lý Lịch Hẹn</h1>
-            <p className="text-[10px] uppercase tracking-widest text-yellow-600 font-bold -mt-1">Energy Booking</p>
+            <h1 className="font-bold text-lg tracking-tight text-slate-900 uppercase">Đặt lịch kết nối</h1>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
+          {!isAdmin && (
+            <div className="flex items-center gap-2 mr-2">
+              <button 
+                onClick={() => setShowLoginModal(true)}
+                className="px-3 py-2 rounded-xl text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:border-yellow-400 transition-all flex items-center gap-2 shadow-sm"
+              >
+                <Lock size={14} />
+                Admin
+              </button>
+              <button 
+                onClick={login}
+                className="px-3 py-2 rounded-xl text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:border-yellow-400 transition-all flex items-center gap-2 shadow-sm"
+              >
+                <User size={14} className="text-yellow-500" />
+                Google Admin
+              </button>
+            </div>
+          )}
+
           {isAdmin && (
             <button 
               onClick={() => setView(view === 'booking' ? 'admin' : 'booking')}
@@ -378,7 +396,7 @@ export default function App() {
                   : "bg-white text-slate-600 border-slate-200 hover:border-yellow-400"
               )}
             >
-              {view === 'booking' ? 'Chế độ Admin' : 'Quay lại'}
+              {view === 'booking' ? 'Admin quản trị' : 'Quay lại'}
             </button>
           )}
 
@@ -560,6 +578,9 @@ export default function App() {
                             const isSelected = selectedSlot === slot;
                             const isSlotPast = isToday(selectedDate) && parse(format(new Date(), 'HH:mm'), 'HH:mm', new Date()) > parse(slot, 'HH:mm', new Date());
                             
+                            const activeDuration = currentDayConfig?.duration || slotDuration;
+                            const slotEndTime = format(addMinutes(parse(slot, 'HH:mm', new Date()), activeDuration), 'HH:mm');
+
                             return (
                               <div key={slot} className="relative group">
                                 <button
@@ -577,7 +598,7 @@ export default function App() {
                                     (isLocked || isSlotPast) && !appointment
                                       ? "bg-slate-50 border-slate-100 text-slate-200 cursor-not-allowed" 
                                       : appointment
-                                        ? "bg-yellow-50 border-yellow-100 text-yellow-200 opacity-50"
+                                        ? "bg-yellow-400 border-yellow-400 text-amber-950 shadow-md shadow-yellow-100/50"
                                         : isSelected
                                           ? "bg-white border-yellow-400 ring-2 ring-yellow-400 shadow-xl shadow-yellow-100"
                                           : "bg-white border-slate-200 text-slate-600 hover:border-yellow-400 hover:bg-yellow-50"
@@ -730,7 +751,7 @@ export default function App() {
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-200">
                 <div className="space-y-6">
                   <div>
-                    <h2 className="text-3xl font-bold tracking-tight text-slate-900">Quản lý lịch hẹn</h2>
+                    <h2 className="text-3xl font-bold tracking-tight text-slate-900">Đặt lịch kết nối</h2>
                     <p className="text-slate-500 mt-1 font-medium">{format(selectedDate, 'EEEE, d MMMM yyyy', { locale: vi })}</p>
                   </div>
 
@@ -927,7 +948,7 @@ export default function App() {
                           setShowManageModal(true);
                         }}
                         className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                        title="Quản lý lịch hẹn"
+                        title="Đặt lịch kết nối"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -951,7 +972,7 @@ export default function App() {
               className="bg-white rounded-[32px] p-8 max-w-sm w-full shadow-2xl border border-yellow-200"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-slate-900">Quản lý lịch hẹn</h2>
+                <h2 className="text-xl font-bold text-slate-900">Đặt lịch kết nối</h2>
                 <button onClick={() => { setShowManageModal(false); setManagePassword(''); }} className="text-slate-400 hover:text-slate-600">
                   <ChevronRight size={20} className="rotate-45" />
                 </button>
