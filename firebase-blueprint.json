@@ -13,6 +13,7 @@
         "endTime": { "type": "string", "description": "End time (HH:mm)." },
         "password": { "type": "string", "description": "Mật mã bảo vệ lịch hẹn." },
         "status": { "type": "string", "enum": ["active", "cancelled"], "description": "Trạng thái lịch hẹn." },
+        "cancellationReason": { "type": "string", "description": "Lý do hủy lịch từ Admin." },
         "duration": { "type": "number", "description": "Duration in minutes." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the booking was made." }
       },
@@ -35,7 +36,8 @@
       "type": "object",
       "properties": {
         "slotDuration": { "type": "number", "default": 30 },
-        "password": { "type": "string", "description": "Master password for override" }
+        "password": { "type": "string", "description": "Master password for override" },
+        "announcement": { "type": "string", "description": "Thông báo quan trọng từ Admin hiển thị ở trang chủ." }
       }
     },
     "DayConfig": {

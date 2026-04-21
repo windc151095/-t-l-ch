@@ -7,7 +7,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) || 
+        request.auth.token.email == "congnguyen151095@gmail.com"
+      );
     }
 
     function isValidId(id) {
@@ -35,29 +38,35 @@ service cloud.firestore {
         && data.createdAt == request.time;
     }
 
-    // Admins collection - specific document read for check
+    // Admins collection
     match /admins/{userId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
-      allow write: if false;
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
     }
 
     // Public Collections
     match /settings/global {
       allow read: if true;
-      allow write: if isAdmin() || (incoming().password == '123456');
+      allow write: if isAdmin();
+    }
+
+    match /dayConfigs/{dateStr} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /lockedSlots/{slotId} {
       allow read: if true;
-      allow write: if isAdmin() || (incoming().password == '123456');
-      allow delete: if isAdmin() || (true); // Deleting locked slots usually doesn't have request.resource, so we rely on the UI and isAdmin check if possible. But for simple admin, I'll allow delete if they know the ID or if I transition delete to an "ignore" list. Actually, for lockedSlots, I'll allow delete if isAdmin() OR if I change the logic.
+      allow write, delete: if isAdmin();
     }
 
     match /appointments/{appointmentId} {
       allow read: if true;
       allow create: if isValidAppointment(incoming()) && isValidId(appointmentId);
-      allow update: if isAdmin() || (incoming().password == existing().password) || (incoming().password == '123456');
-      allow delete: if isAdmin() || (incoming().password == '123456');
+      allow update: if (isAdmin() || incoming().password == existing().password)
+        && (!incoming().keys().hasAny(['cancellationReason']) || (incoming().cancellationReason is string && incoming().cancellationReason.size() <= 500))
+        && (!incoming().keys().hasAny(['cancelledByAdmin']) || incoming().cancelledByAdmin is bool);
+      allow delete: if isAdmin();
     }
 
     // Default deny for everything else
