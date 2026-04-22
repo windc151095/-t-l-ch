@@ -527,17 +527,17 @@ export default function App() {
             <div className="flex items-center gap-2 mr-2">
               <button 
                 onClick={() => setShowLoginModal(true)}
-                className="px-3 py-2 rounded-xl text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:border-yellow-400 transition-all flex items-center gap-2 shadow-sm"
+                className="w-10 h-10 rounded-xl bg-white text-slate-400 border border-slate-200 hover:border-yellow-400 hover:text-yellow-600 transition-all flex items-center justify-center shadow-sm"
+                title="Đăng nhập Admin (Mã PIN)"
               >
-                <Lock size={14} />
-                Admin
+                <Lock size={18} />
               </button>
               <button 
                 onClick={login}
-                className="px-3 py-2 rounded-xl text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:border-yellow-400 transition-all flex items-center gap-2 shadow-sm"
+                className="w-10 h-10 rounded-xl bg-white text-slate-400 border border-slate-200 hover:border-yellow-400 hover:text-yellow-600 transition-all flex items-center justify-center shadow-sm"
+                title="Đăng nhập Google Admin"
               >
-                <User size={14} className="text-yellow-500" />
-                Google Admin
+                <User size={18} className="text-yellow-500" />
               </button>
             </div>
           )}
