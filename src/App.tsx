@@ -318,6 +318,28 @@ export default function App() {
     return () => unsubRecent();
   }, [isAdmin]);
 
+  const formatTime = (h: number) => {
+    const hh = Math.floor(h);
+    const mm = Math.round((h % 1) * 60);
+    return `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
+  };
+
+  const getTimeOptions = (label: string, duration: number) => {
+    // Sáng: 08:00 - 12:00, Chiều: 12:00 - 22:00
+    const start = label === 'Sáng' ? 8 : 12;
+    const end = label === 'Sáng' ? 12 : 22;
+    const options = [];
+    const step = duration / 60;
+    
+    // Use a small epsilon to handle floating point precision issues
+    for (let i = start; i <= end + 0.001; i += step) {
+      if (i <= end + 0.001) {
+        options.push(i);
+      }
+    }
+    return options;
+  };
+
   const generateSlots = () => {
     const rawSlots: string[] = [];
     const activeDuration = currentDayConfig?.duration || slotDuration;
@@ -330,8 +352,8 @@ export default function App() {
         if (range.label === 'Chiều' && !currentDayConfig.afternoonActive) return;
       }
 
-      let current = parse(`${range.start}:00`, 'H:mm', new Date());
-      const end = parse(`${range.end}:00`, 'H:mm', new Date());
+      let current = parse(formatTime(range.start), 'H:mm', new Date());
+      const end = parse(formatTime(range.end), 'H:mm', new Date());
 
       while (current < end) {
         rawSlots.push(format(current, 'HH:mm'));
@@ -993,18 +1015,18 @@ export default function App() {
                                 <div className="flex items-center gap-2">
                                   <select value={range.start} onChange={(e) => {
                                     const newRanges = [...businessHours];
-                                    newRanges[rbIdx].start = parseInt(e.target.value);
+                                    newRanges[rbIdx].start = parseFloat(e.target.value);
                                     updateSettings({ businessHours: newRanges });
                                   }} className="bg-white border border-slate-200 text-xs font-bold p-2 rounded-xl outline-none">
-                                    {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                                    {getTimeOptions(range.label, slotDuration).map(val => <option key={val} value={val}>{formatTime(val)}</option>)}
                                   </select>
                                   <span className="text-slate-300">→</span>
                                   <select value={range.end} onChange={(e) => {
                                     const newRanges = [...businessHours];
-                                    newRanges[rbIdx].end = parseInt(e.target.value);
+                                    newRanges[rbIdx].end = parseFloat(e.target.value);
                                     updateSettings({ businessHours: newRanges });
                                   }} className="bg-white border border-slate-200 text-xs font-bold p-2 rounded-xl outline-none">
-                                    {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                                    {getTimeOptions(range.label, slotDuration).map(val => <option key={val} value={val}>{formatTime(val)}</option>)}
                                   </select>
                                 </div>
                               </div>
@@ -1221,18 +1243,18 @@ export default function App() {
                                    <div className="flex items-center gap-2">
                                      <select value={range.start} onChange={(e) => {
                                        const newRanges = [...(editingDayConfig?.businessHours || businessHours)];
-                                       newRanges[rbIdx] = { ...newRanges[rbIdx], start: parseInt(e.target.value) };
+                                       newRanges[rbIdx] = { ...newRanges[rbIdx], start: parseFloat(e.target.value) };
                                        setEditingDayConfig({ ...editingDayConfig, businessHours: newRanges });
                                      }} className="bg-slate-50 border border-slate-100 text-xs font-bold p-2 rounded-xl outline-none">
-                                       {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                                       {getTimeOptions(range.label, editingDayConfig?.duration || slotDuration).map(val => <option key={val} value={val}>{formatTime(val)}</option>)}
                                      </select>
                                      <span className="text-slate-300">→</span>
                                      <select value={range.end} onChange={(e) => {
                                        const newRanges = [...(editingDayConfig?.businessHours || businessHours)];
-                                       newRanges[rbIdx] = { ...newRanges[rbIdx], end: parseInt(e.target.value) };
+                                       newRanges[rbIdx] = { ...newRanges[rbIdx], end: parseFloat(e.target.value) };
                                        setEditingDayConfig({ ...editingDayConfig, businessHours: newRanges });
                                      }} className="bg-slate-50 border border-slate-100 text-xs font-bold p-2 rounded-xl outline-none">
-                                       {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                                       {getTimeOptions(range.label, editingDayConfig?.duration || slotDuration).map(val => <option key={val} value={val}>{formatTime(val)}</option>)}
                                      </select>
                                    </div>
                                  </div>
