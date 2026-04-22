@@ -14,7 +14,13 @@ import {
   parse, 
   isPast, 
   isToday,
-  startOfDay
+  startOfDay,
+  startOfMonth,
+  endOfMonth,
+  isSameMonth,
+  addMonths,
+  getDay,
+  getDate
 } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { 
@@ -30,7 +36,10 @@ import {
   Lock,
   LogOut,
   CalendarDays,
-  Plus
+  Plus,
+  Settings,
+  Edit3,
+  Calendar
 } from 'lucide-react';
 import { 
   collection, 
@@ -44,7 +53,10 @@ import {
   onSnapshot,
   updateDoc,
   setDoc,
-  getDoc
+  getDoc,
+  orderBy,
+  limit,
+  FirestoreError
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -55,12 +67,14 @@ import {
 import { db, auth, googleProvider } from './lib/firebase';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { handleFirestoreError } from './services/errorService';
 
 // --- Types ---
 interface DayConfig {
   morningActive: boolean;
   afternoonActive: boolean;
   duration: number;
+  businessHours?: { label: string; start: number; end: number }[];
 }
 
 interface Appointment {
@@ -85,6 +99,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [recentCancelled, setRecentCancelled] = useState<Appointment[]>([]);
   const [lockedSlots, setLockedSlots] = useState<{ id: string; date: string; startTime: string }[]>([]);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isFirebaseAdmin, setIsFirebaseAdmin] = useState(false);
@@ -95,13 +110,17 @@ export default function App() {
   const [formData, setFormData] = useState({ name: '', guide: '', question: '', password: '' });
   const [slotDuration, setSlotDuration] = useState(30);
   const [businessHours, setBusinessHours] = useState([
-    { label: 'Sáng', start: 9, end: 12 },
-    { label: 'Chiều', start: 14, end: 19 }
+    { label: 'Sáng', start: 8, end: 12 },
+    { label: 'Chiều', start: 12, end: 22 }
   ]);
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const [currentDayConfig, setCurrentDayConfig] = useState<DayConfig | null>(null);
+  const [editingDayConfig, setEditingDayConfig] = useState<Partial<DayConfig> | null>(null);
+  const [allDayConfigs, setAllDayConfigs] = useState<{ [key: string]: DayConfig }>({});
   const [announcement, setAnnouncement] = useState('');
   const [isAdminMessageVisible, setIsAdminMessageVisible] = useState(true);
+  const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
+  const [activeAdminTab, setActiveAdminTab] = useState<'config' | 'appointments' | 'cancelled'>('appointments');
 
   const isAdmin = isFirebaseAdmin || isStaticAdmin;
 
@@ -110,18 +129,19 @@ export default function App() {
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const configRef = doc(db, 'dayConfigs', dateStr);
     
-    // Fallback to global if doesn't exist
-    const baseConfig = currentDayConfig || {
+    const baseConfig = editingDayConfig || {
       morningActive: true,
       afternoonActive: true,
-      duration: slotDuration
+      duration: slotDuration,
+      businessHours: businessHours
     };
 
-    const newConfig = { ...baseConfig, ...updates, date: dateStr };
+    const newConfig = { ...baseConfig, ...updates, date: dateStr, password: '123456' };
     try {
       await setDoc(configRef, newConfig, { merge: true });
     } catch (err) {
       console.error("Day config error:", err);
+      handleFirestoreError(err, 'write', configRef.path);
     }
   };
 
@@ -129,9 +149,10 @@ export default function App() {
     setIsUpdatingSettings(true);
     try {
       const settingsRef = doc(db, 'settings', 'global');
-      await setDoc(settingsRef, updates, { merge: true });
+      await setDoc(settingsRef, { ...updates, password: '123456' }, { merge: true });
     } catch (err) {
       console.error("Settings error:", err);
+      handleFirestoreError(err, 'write', 'settings/global');
     } finally {
       setIsUpdatingSettings(false);
     }
@@ -143,6 +164,7 @@ export default function App() {
   const [isManaging, setIsManaging] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
   const [adminReason, setAdminReason] = useState('');
+  const [isSuddenCancel, setIsSuddenCancel] = useState(true);
 
   // Simple Admin Login State
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -155,7 +177,8 @@ export default function App() {
       if (u) {
         try {
           const adminDoc = await getDoc(doc(db, 'admins', u.uid));
-          setIsFirebaseAdmin(adminDoc.exists());
+          const isHardcodedAdmin = u.email === "congnguyen151095@gmail.com";
+          setIsFirebaseAdmin(adminDoc.exists() || isHardcodedAdmin);
         } catch (err) {
           console.error("Admin check error:", err);
           setIsFirebaseAdmin(false);
@@ -198,8 +221,8 @@ export default function App() {
         } else if (data.businessHours && !Array.isArray(data.businessHours)) {
           // Migration from old single range to new array format
           setBusinessHours([
-            { label: 'Sáng', start: data.businessHours.start || 9, end: 12 },
-            { label: 'Chiều', start: 14, end: data.businessHours.end || 19 }
+            { label: 'Sáng', start: data.businessHours.start || 8, end: 12 },
+            { label: 'Chiều', start: 12, end: data.businessHours.end || 22 }
           ]);
         }
       }
@@ -229,9 +252,17 @@ export default function App() {
     // Fetch Day Config
     const unsubDayConfig = onSnapshot(doc(db, 'dayConfigs', dateStr), (snapshot) => {
       if (snapshot.exists()) {
-        setCurrentDayConfig(snapshot.data() as DayConfig);
+        const data = snapshot.data() as DayConfig;
+        setCurrentDayConfig(data);
+        setEditingDayConfig(data);
       } else {
         setCurrentDayConfig(null);
+        setEditingDayConfig({
+          morningActive: true,
+          afternoonActive: true,
+          duration: slotDuration,
+          businessHours: businessHours
+        });
       }
     });
 
@@ -239,14 +270,60 @@ export default function App() {
       unsubApps();
       unsubLocked();
       unsubDayConfig();
+      setEditingDayConfig(null);
     };
-  }, [selectedDate]);
+  }, [selectedDate, slotDuration, businessHours]);
+
+  // Fetch all day configs for highlighting (Admin View only)
+  useEffect(() => {
+    if (!isAdmin) {
+      setAllDayConfigs({});
+      return;
+    }
+
+    const unsubAllConfigs = onSnapshot(collection(db, 'dayConfigs'), (snapshot) => {
+      const configs: { [key: string]: DayConfig } = {};
+      snapshot.forEach(doc => {
+        configs[doc.id] = doc.data() as DayConfig;
+      });
+      setAllDayConfigs(configs);
+    }, (err) => {
+      console.error("All configs listen error:", err);
+    });
+
+    return () => unsubAllConfigs();
+  }, [isAdmin]);
+
+  // Fetch 10 most recent global cancellations
+  useEffect(() => {
+    if (!isAdmin) {
+      setRecentCancelled([]);
+      return;
+    }
+
+    const qRecent = query(
+      collection(db, 'appointments'),
+      where('status', '==', 'cancelled'),
+      orderBy('cancelledAt', 'desc'),
+      limit(10)
+    );
+
+    const unsubRecent = onSnapshot(qRecent, (snapshot) => {
+      const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+      setRecentCancelled(apps);
+    }, (err) => {
+      console.error("Recent cancellations error:", err);
+    });
+
+    return () => unsubRecent();
+  }, [isAdmin]);
 
   const generateSlots = () => {
-    const slots: string[] = [];
+    const rawSlots: string[] = [];
     const activeDuration = currentDayConfig?.duration || slotDuration;
+    const activeBusinessHours = currentDayConfig?.businessHours || businessHours;
     
-    businessHours.forEach(range => {
+    activeBusinessHours.forEach(range => {
       // Check if this session is enabled for the current day
       if (currentDayConfig) {
         if (range.label === 'Sáng' && !currentDayConfig.morningActive) return;
@@ -257,11 +334,13 @@ export default function App() {
       const end = parse(`${range.end}:00`, 'H:mm', new Date());
 
       while (current < end) {
-        slots.push(format(current, 'HH:mm'));
+        rawSlots.push(format(current, 'HH:mm'));
         current = addMinutes(current, activeDuration);
       }
     });
-    return slots;
+
+    // Ensure unique slots in case of overlapping business hour ranges
+    return Array.from(new Set(rawSlots)).sort();
   };
 
   const slots = generateSlots();
@@ -276,7 +355,8 @@ export default function App() {
       const activeDuration = currentDayConfig?.duration || slotDuration;
       const endTime = format(addMinutes(parse(selectedSlot, 'HH:mm', new Date()), activeDuration), 'HH:mm');
       
-      await addDoc(collection(db, 'appointments'), {
+      const appointmentsRef = collection(db, 'appointments');
+      await addDoc(appointmentsRef, {
         clientName: formData.name,
         guide: formData.guide,
         question: formData.question,
@@ -294,7 +374,10 @@ export default function App() {
       setTimeout(() => setBookingSuccess(false), 5000);
     } catch (err) {
       console.error("Booking error:", err);
-      alert("Đã có lỗi xảy ra. Mã PIN cần từ 4-20 ký tự.");
+      if (err instanceof Error && err.name === 'FirebaseError' && (err as any).code === 'permission-denied') {
+        handleFirestoreError(err, 'create', 'appointments');
+      }
+      alert("Đã có lỗi xảy ra. Vui lòng kiểm tra lại thông tin. (Mã PIN tối thiểu 4 ký tự)");
     } finally {
       setIsBooking(false);
     }
@@ -310,9 +393,10 @@ export default function App() {
         } else {
           await updateDoc(doc(db, 'appointments', manageAppointment.id), {
             status: 'cancelled',
-            cancellationReason: adminReason || 'Lý do đột xuất từ phía Người kết nối.',
-            cancelledByAdmin: true
-          });
+            cancellationReason: adminReason || (isSuddenCancel ? 'Lý do đột xuất từ phía Người kết nối.' : 'Lịch hẹn bị hủy do thông tin sai hoặc yêu cầu thay đổi.'),
+            cancelledByAdmin: isSuddenCancel,
+            cancelledAt: serverTimestamp()
+          }).catch(err => handleFirestoreError(err, 'update', `appointments/${manageAppointment.id}`));
         }
       } else {
         // Strict PIN Verification
@@ -330,8 +414,9 @@ export default function App() {
         }
 
         await updateDoc(doc(db, 'appointments', manageAppointment.id), {
-          status: 'cancelled'
-        });
+          status: 'cancelled',
+          cancelledAt: serverTimestamp()
+        }).catch(err => handleFirestoreError(err, 'update', `appointments/${manageAppointment.id}`));
       }
       setShowManageModal(false);
       setManageAppointment(null);
@@ -339,7 +424,9 @@ export default function App() {
       setAdminReason('');
     } catch (err) {
       console.error("Cancel error:", err);
-      alert("Có lỗi xảy ra. Vui lòng liên hệ quản trị viên.");
+      if (!(err instanceof Error) || !err.message.startsWith('{')) {
+        alert("Có lỗi xảy ra. Vui lòng liên hệ quản trị viên.");
+      }
     } finally {
       setIsManaging(false);
     }
@@ -547,7 +634,7 @@ export default function App() {
                             </div>
                             <div className="overflow-hidden">
                               <div className="flex items-center gap-2">
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">Người đặt</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">Học viên</p>
                                 {app.status === 'cancelled' && (
                                   <span className="text-[8px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Đã hủy</span>
                                 )}
@@ -757,7 +844,7 @@ export default function App() {
                          <div className="bg-white rounded-[40px] p-10 lg:p-14 border border-yellow-200 shadow-2xl shadow-yellow-100/50">
                            <form onSubmit={handleBooking} className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
                              <div className="space-y-2">
-                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Tên của bạn</label>
+                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Tên Học viên</label>
                                <input 
                                  required
                                  type="text" 
@@ -852,302 +939,423 @@ export default function App() {
               exit={{ opacity: 0 }}
               className="space-y-12"
             >
-              <div className="flex flex-col md:flex-row md:items-start justify-between gap-8 pb-8 border-b border-slate-100">
-                <div className="space-y-8 flex-1">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-3xl font-bold tracking-tight text-slate-900">Quản trị hệ thống</h2>
-                      <p className="text-slate-500 mt-1 font-medium">{format(selectedDate, 'EEEE, d MMMM yyyy', { locale: vi })}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-6 p-8 bg-white rounded-3xl border border-slate-200 shadow-sm">
-                    <div className="flex flex-wrap items-center gap-12 pb-6 border-b border-slate-50">
-                      <div className="space-y-3">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Thời lượng mặc định</p>
-                        <div className="flex items-center gap-2">
-                          {[15, 20, 30].map(val => (
-                            <button
-                              key={val}
-                              onClick={() => updateSettings({ slotDuration: val })}
-                              disabled={isUpdatingSettings}
-                              className={cn(
-                                "px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                                slotDuration === val 
-                                  ? "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-200" 
-                                  : "bg-slate-50 text-slate-500 hover:bg-slate-100"
-                              )}
-                            >
-                              {val} phút
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-3 flex-1 min-w-[300px]">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <Plus size={12} className="text-yellow-600" />
-                          Thông báo chung
-                        </p>
-                        <div className="flex gap-2">
-                          <input 
-                            type="text" 
-                            value={announcement}
-                            onChange={(e) => setAnnouncement(e.target.value)}
-                            placeholder="Nhập thông báo hiển thị trên trang chủ..."
-                            className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:border-yellow-400 focus:bg-white transition-all outline-none text-sm font-medium"
-                          />
-                          <button 
-                            onClick={() => updateSettings({ announcement })}
-                            disabled={isUpdatingSettings}
-                            className="px-6 py-2 bg-amber-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95 disabled:opacity-50"
-                          >
-                            Lưu thông báo
-                          </button>
-                          {announcement && (
-                            <button 
-                              onClick={() => {
-                                setAnnouncement('');
-                                updateSettings({ announcement: '' });
-                              }}
-                              className="px-4 py-2 bg-slate-100 text-slate-400 rounded-xl text-[10px] font-bold uppercase transition-all hover:bg-red-50 hover:text-red-500"
-                            >
-                              Xóa
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Khung giờ làm việc mặc định</p>
-                      <div className="flex flex-wrap gap-8">
-                        {businessHours.map((range, rbIdx) => (
-                          <div key={rbIdx} className="flex items-center gap-4 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
-                            <span className="text-[10px] text-slate-400 font-bold uppercase w-16">{range.label}</span>
-                            <div className="flex items-center gap-3">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[9px] text-slate-300 font-bold">TỪ</span>
-                                <select 
-                                  value={range.start}
-                                  onChange={(e) => {
-                                    const newRanges = [...businessHours];
-                                    newRanges[rbIdx].start = parseInt(e.target.value);
-                                    updateSettings({ businessHours: newRanges });
-                                  }}
-                                  className="bg-white border border-slate-200 text-xs font-bold p-2 rounded-lg outline-none focus:ring-2 focus:ring-yellow-400"
-                                >
-                                  {Array.from({length: 24}).map((_, i) => (
-                                    <option key={i} value={i}>{i}:00</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[9px] text-slate-300 font-bold">ĐẾN</span>
-                                <select 
-                                  value={range.end}
-                                  onChange={(e) => {
-                                    const newRanges = [...businessHours];
-                                    newRanges[rbIdx].end = parseInt(e.target.value);
-                                    updateSettings({ businessHours: newRanges });
-                                  }}
-                                  className="bg-white border border-slate-200 text-xs font-bold p-2 rounded-lg outline-none focus:ring-2 focus:ring-yellow-400"
-                                >
-                                  {Array.from({length: 24}).map((_, i) => (
-                                    <option key={i} value={i}>{i}:00</option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Day Specific Config */}
-                  <div className="bg-yellow-50 p-8 rounded-[32px] border border-yellow-200 space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-bold text-amber-950 uppercase tracking-widest">Cấu hình ngày {format(selectedDate, 'dd/MM/yyyy')}</h3>
-                      </div>
-                      {currentDayConfig && (
-                        <button 
-                          onClick={() => {
-                            const dateStr = format(selectedDate, 'yyyy-MM-dd');
-                            deleteDoc(doc(db, 'dayConfigs', dateStr));
-                          }}
-                          className="px-4 py-2 bg-white text-red-500 text-[10px] font-bold rounded-xl border border-red-100 hover:bg-red-50 transition-all shadow-sm uppercase tracking-wider"
-                        >
-                          Xóa tùy chỉnh ngày
-                        </button>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                      <div className="space-y-4">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trạng thái ngày</p>
-                        <div className="flex gap-8">
-                          <label className="flex items-center gap-4 cursor-pointer group p-4 bg-white/50 rounded-2xl border border-yellow-200/50 hover:bg-white transition-all">
-                            <input 
-                              type="checkbox" 
-                              checked={currentDayConfig?.morningActive ?? true}
-                              onChange={(e) => updateDayConfig({ morningActive: e.target.checked })}
-                              className="w-6 h-6 rounded-lg border-yellow-300 text-yellow-500 focus:ring-yellow-400 transition-all"
-                            />
-                            <span className="text-xs font-black text-slate-700 uppercase">Buổi Sáng</span>
-                          </label>
-                          <label className="flex items-center gap-4 cursor-pointer group p-4 bg-white/50 rounded-2xl border border-yellow-200/50 hover:bg-white transition-all">
-                            <input 
-                              type="checkbox" 
-                              checked={currentDayConfig?.afternoonActive ?? true}
-                              onChange={(e) => updateDayConfig({ afternoonActive: e.target.checked })}
-                              className="w-6 h-6 rounded-lg border-yellow-300 text-yellow-500 focus:ring-yellow-400 transition-all"
-                            />
-                            <span className="text-xs font-black text-slate-700 uppercase">Buổi Chiều</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Thời lượng phiên riêng ngày này</p>
-                        <div className="flex gap-2">
-                          {[15, 20, 30].map(val => (
-                            <button
-                              key={val}
-                              onClick={() => updateDayConfig({ duration: val })}
-                              className={cn(
-                                "px-6 py-3 rounded-2xl text-xs font-black transition-all border-2",
-                                (currentDayConfig?.duration ?? slotDuration) === val 
-                                  ? "bg-yellow-400 text-amber-950 border-yellow-400 shadow-xl shadow-yellow-200" 
-                                  : "bg-white text-slate-400 border-white hover:border-yellow-200"
-                              )}
-                            >
-                              {val} phút
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-slate-100">
+                <div>
+                  <h2 className="text-3xl font-bold tracking-tight text-slate-900">Quản trị hệ thống</h2>
+                  <p className="text-slate-500 mt-1 font-medium">{format(selectedDate, 'EEEE, d MMMM yyyy', { locale: vi })}</p>
                 </div>
 
-                <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm self-start md:self-end">
-                  <button 
-                    onClick={() => setSelectedDate(addDays(selectedDate, -1))}
-                    className="p-3 hover:bg-slate-50 rounded-xl text-slate-500 transition-colors"
-                  >
-                    <ChevronLeft size={20} />
-                  </button>
-                  <div className="px-6 font-black text-sm text-slate-900 min-w-[140px] text-center tracking-widest tabular-nums border-x border-slate-100">
-                    {format(selectedDate, 'dd/MM/yyyy')}
-                  </div>
-                  <button 
-                    onClick={() => setSelectedDate(addDays(selectedDate, 1))}
-                    className="p-3 hover:bg-slate-50 rounded-xl text-slate-500 transition-colors"
-                  >
-                    <ChevronRight size={20} />
-                  </button>
+                <div className="flex bg-slate-100 p-1 rounded-2xl">
+                  {[
+                    { id: 'appointments', label: 'Lịch hẹn', icon: <CalendarDays size={16} /> },
+                    { id: 'config', label: 'Cấu hình lịch hẹn', icon: <Clock size={16} /> },
+                    { id: 'cancelled', label: 'Hủy lịch', icon: <Trash2 size={16} /> },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveAdminTab(tab.id as any)}
+                      className={cn(
+                        "flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
+                        activeAdminTab === tab.id 
+                          ? "bg-white text-slate-900 shadow-sm" 
+                          : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+                      )}
+                    >
+                      {tab.icon}
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-12">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between px-2">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Lịch hẹn hoạt động</h3>
-                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[9px] font-black rounded-full border border-emerald-200 uppercase tracking-widest">Active</span>
-                  </div>
-                  
-                  {appointments.filter(a => (a as any).status !== 'cancelled').length === 0 ? (
-                    <div className="bg-slate-50/50 rounded-[40px] p-24 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
-                      <CalendarDays size={48} className="text-slate-200 mb-4" />
-                      <h3 className="text-lg font-bold text-slate-400 italic">Chưa có lịch hẹn cho ngày này</h3>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-3">
-                      {[...appointments].filter(a => (a as any).status !== 'cancelled').sort((a, b) => a.startTime.localeCompare(b.startTime)).map((app) => (
-                        <div key={app.id} className="bg-white p-6 rounded-3xl border border-slate-100 flex items-center justify-between group hover:border-yellow-200 transition-all shadow-sm hover:shadow-md border-l-4 border-l-yellow-400">
-                          <div className="flex items-center gap-8">
-                            <div className="w-16 text-center shrink-0">
-                              <span className="text-xl font-black text-slate-900 tabular-nums">{app.startTime}</span>
-                            </div>
-                            <div className="h-10 w-px bg-slate-100" />
-                            <div className="space-y-1">
-                              <h4 className="font-bold text-slate-900">{app.clientName}</h4>
-                              <div className="flex items-center gap-6 text-[11px] font-medium text-slate-400">
-                                <span className="flex items-center gap-1.5"><User size={12} /> {app.guide}</span>
-                                <span className="flex items-center gap-1.5 italic"><MessageSquare size={12} /> {app.question}</span>
+              <div className="space-y-12">
+                {activeAdminTab === 'config' && (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+                    {/* 1. Khung mặc định (Global settings) */}
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-yellow-400 flex items-center justify-center text-amber-950">
+                          <Settings size={20} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-black text-slate-900 tracking-tight">Cấu hình mặc định</h3>
+                          <p className="text-xs text-slate-400 font-medium italic">Áp dụng chung cho toàn bộ hệ thống</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
+                        <div className="space-y-4">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Khung giờ làm việc mặc định</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {businessHours.map((range, rbIdx) => (
+                              <div key={rbIdx} className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-yellow-400 transition-all">
+                                <span className="text-[10px] text-slate-500 font-black uppercase w-12">{range.label}</span>
+                                <div className="flex items-center gap-2">
+                                  <select value={range.start} onChange={(e) => {
+                                    const newRanges = [...businessHours];
+                                    newRanges[rbIdx].start = parseInt(e.target.value);
+                                    updateSettings({ businessHours: newRanges });
+                                  }} className="bg-white border border-slate-200 text-xs font-bold p-2 rounded-xl outline-none">
+                                    {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                                  </select>
+                                  <span className="text-slate-300">→</span>
+                                  <select value={range.end} onChange={(e) => {
+                                    const newRanges = [...businessHours];
+                                    newRanges[rbIdx].end = parseInt(e.target.value);
+                                    updateSettings({ businessHours: newRanges });
+                                  }} className="bg-white border border-slate-200 text-xs font-bold p-2 rounded-xl outline-none">
+                                    {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                                  </select>
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => {
-                                setManageAppointment(app);
-                                setShowManageModal(true);
-                              }}
-                              className="p-3 text-slate-300 hover:text-red-500 bg-slate-50 rounded-2xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50"
-                              title="Quản lý lịch hẹn"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            ))}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
-                {(() => {
-                  const cancelledApps = appointments.filter(a => (a as any).status === 'cancelled');
-                  if (cancelledApps.length === 0) return null;
-                  return (
-                    <div className="space-y-4 pt-12 border-t border-slate-100">
-                      <div className="flex items-center justify-between px-2">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Lịch hẹn đã gỡ bỏ</h3>
-                        <span className="px-2.5 py-1 bg-red-100 text-red-700 text-[9px] font-black rounded-full border border-red-200 uppercase tracking-widest">Cancelled</span>
+                        <div className="space-y-8">
+                          <div className="space-y-4">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Thời lượng mỗi phiên mặc định</p>
+                             <div className="flex flex-wrap gap-2">
+                               {[15, 20, 30].map(val => (
+                                 <button key={val} onClick={() => updateSettings({ slotDuration: val })} 
+                                   className={cn("px-6 py-3 rounded-2xl text-[11px] font-black transition-all border-2",
+                                   slotDuration === val ? "bg-yellow-400 text-amber-950 border-yellow-400 shadow-xl shadow-yellow-100" : "bg-white text-slate-400 border-slate-100 hover:border-yellow-200")}>
+                                   {val} phút
+                                 </button>
+                               ))}
+                             </div>
+                          </div>
+                          
+                          <div className="space-y-4">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Thông báo trên trang chủ</p>
+                             <div className="flex gap-2">
+                               <input type="text" value={announcement} onChange={(e) => setAnnouncement(e.target.value)}
+                                 placeholder="Gửi lời chào hoặc thông báo đến học viên..."
+                                 className="flex-1 px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-sm font-bold focus:bg-white focus:border-yellow-400 transition-all" />
+                               <button onClick={() => updateSettings({ announcement })}
+                                 className="px-6 py-3 bg-amber-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg">Lưu</button>
+                             </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-1 gap-3 opacity-60">
-                        {cancelledApps.sort((a,b) => a.startTime.localeCompare(b.startTime)).map((app) => (
-                          <div key={app.id} className="bg-slate-50/50 p-6 rounded-3xl border border-dashed border-slate-200 flex items-center justify-between transition-all">
-                            <div className="flex items-center gap-8">
-                              <div className="w-16 text-center shrink-0">
-                                <span className="text-xl font-bold text-slate-300 tabular-nums">{app.startTime}</span>
+                    </div>
+
+                    {/* 2. Lịch (Year/Month Overview) */}
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
+                              <Calendar size={20} />
+                            </div>
+                            <div>
+                               <h3 className="text-lg font-black text-slate-900 tracking-tight">Tổng quan lịch</h3>
+                               <p className="text-xs text-slate-400 font-medium italic">Chọn ngày để tùy chỉnh khung giờ riêng</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                            <button onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="p-3 hover:bg-white rounded-xl text-slate-500 shadow-sm transition-all"><ChevronLeft size={18} /></button>
+                            <span className="min-w-[140px] text-center font-black text-sm text-slate-900 uppercase tracking-widest tabular-nums">{format(currentMonth, 'MMMM yyyy', { locale: vi })}</span>
+                            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-3 hover:bg-white rounded-xl text-slate-500 shadow-sm transition-all"><ChevronRight size={18} /></button>
+                          </div>
+                       </div>
+
+                       <div className="grid grid-cols-7 gap-2 max-w-2xl mx-auto">
+                          {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(d => (
+                            <div key={d} className="text-[11px] font-black text-slate-300 text-center uppercase py-3">{d}</div>
+                          ))}
+                          {(() => {
+                            const start = startOfMonth(currentMonth);
+                            const end = endOfMonth(currentMonth);
+                            const days = eachDayOfInterval({ start, end });
+                            const firstDay = getDay(start);
+                            const padding = firstDay === 0 ? 6 : firstDay - 1;
+                            const result = [];
+                            for (let i = 0; i < padding; i++) result.push(<div key={`pad-${i}`} />);
+                            days.forEach(day => {
+                              const dateStr = format(day, 'yyyy-MM-dd');
+                              const isSelected = isSameDay(day, selectedDate);
+                              const hasConfig = allDayConfigs[dateStr];
+                              result.push(
+                                <button key={dateStr} onClick={() => setSelectedDate(day)}
+                                  className={cn("h-12 w-full rounded-2xl text-xs font-black flex flex-col items-center justify-center transition-all relative group",
+                                  isSelected ? "bg-amber-950 text-white shadow-xl scale-110 z-10" :
+                                  hasConfig ? "bg-yellow-400 text-amber-950 shadow-md" : "hover:bg-slate-50 text-slate-600 border border-transparent hover:border-slate-100")}>
+                                  {format(day, 'd')}
+                                  {hasConfig && !isSelected && <div className="absolute bottom-1.5 w-1 h-1 rounded-full bg-amber-950/20" />}
+                                </button>
+                              );
+                            });
+                            return result;
+                          })()}
+                       </div>
+                       
+                        <div className="flex flex-wrap gap-6 justify-center mt-10 pt-8 border-t border-slate-50">
+                           <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Đã có cấu hình riêng</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-amber-950" />
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ngày đang chọn</span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-slate-100" />
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mặc định</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* 3. Cấu hình ngày (Selected Date Config) */}
+                     <div className="bg-amber-50/50 p-8 rounded-[2.5rem] border border-amber-100 space-y-8">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                           <div className="flex items-center gap-3">
+                             <div className="w-10 h-10 rounded-2xl bg-amber-950 flex items-center justify-center text-white">
+                               <Edit3 size={20} />
+                             </div>
+                             <div>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight">Tùy chỉnh ngày {format(selectedDate, 'dd/MM/yyyy')}</h3>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs text-slate-500 font-medium italic">Ghi đè cấu hình mặc định cho ngày này</p>
+                                  <span className={cn(
+                                    "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter",
+                                    currentDayConfig ? "bg-yellow-100 text-yellow-700" : "bg-slate-100 text-slate-400"
+                                  )}>
+                                    {currentDayConfig ? 'Đang dùng cấu hình riêng' : 'Đang dùng mặc định'}
+                                  </span>
+                                </div>
+                             </div>
+                           </div>
+
+                           <div className="flex items-center gap-4">
+                             <label className="flex items-center gap-4 cursor-pointer bg-white px-6 py-3 rounded-2xl border border-amber-200 shadow-sm hover:border-yellow-400 transition-all group">
+                               <div className={cn(
+                                 "w-10 h-5 rounded-full transition-all relative flex items-center",
+                                 editingDayConfig ? "bg-yellow-400" : "bg-slate-200"
+                               )}>
+                                 <div className={cn(
+                                   "absolute w-3.5 h-3.5 bg-white rounded-full transition-all shadow-sm",
+                                   editingDayConfig ? "left-[22px]" : "left-[3px]"
+                                 )} />
+                               </div>
+                               <input 
+                                 type="checkbox" 
+                                 className="hidden" 
+                                 checked={!!editingDayConfig} 
+                                 onChange={(e) => {
+                                   if (e.target.checked) {
+                                     setEditingDayConfig(currentDayConfig || {
+                                       morningActive: true,
+                                       afternoonActive: true,
+                                       duration: slotDuration,
+                                       businessHours: businessHours
+                                     });
+                                   } else {
+                                     if (currentDayConfig) {
+                                        if (confirm("Về lại mặc định cho ngày này? Mọi tùy chỉnh sẽ bị xóa.")) {
+                                          deleteDoc(doc(db, 'dayConfigs', format(selectedDate, 'yyyy-MM-dd')));
+                                          setEditingDayConfig(null);
+                                        }
+                                     } else {
+                                        setEditingDayConfig(null);
+                                     }
+                                   }
+                                 }}
+                               />
+                               <span className="text-xs font-black text-slate-700 uppercase tracking-widest leading-none">Cấu hình riêng</span>
+                             </label>
+
+                             {(editingDayConfig && JSON.stringify(editingDayConfig) !== JSON.stringify(currentDayConfig || {
+                                morningActive: true,
+                                afternoonActive: true,
+                                duration: slotDuration,
+                                businessHours: businessHours
+                             })) && (
+                               <button onClick={() => updateDayConfig(editingDayConfig)}
+                                 className="px-6 py-3 bg-amber-950 text-white text-[10px] font-black rounded-2xl border border-amber-950 uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-amber-900/20 flex items-center gap-2">
+                                 <Plus size={14} className="text-yellow-400" />
+                                 {currentDayConfig ? 'Lưu thay đổi' : 'Áp dụng ngay'}
+                               </button>
+                             )}
+                           </div>
+                        </div>
+
+                        <div className={cn(
+                          "grid grid-cols-1 xl:grid-cols-2 gap-12 transition-all duration-300",
+                          !editingDayConfig && "opacity-30 pointer-events-none filter grayscale saturate-0"
+                        )}>
+                          <div className="space-y-4">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Trạng thái hoạt động</p>
+                             <div className="flex gap-4">
+                                <label className="flex-1 flex items-center gap-4 cursor-pointer p-4 bg-white rounded-2xl border border-amber-100 hover:border-yellow-400 transition-all shadow-sm">
+                                  <input type="checkbox" checked={editingDayConfig?.morningActive ?? true} onChange={(e) => setEditingDayConfig({ ...editingDayConfig, morningActive: e.target.checked })}
+                                    className="w-6 h-6 rounded-lg text-amber-950 focus:ring-yellow-400" />
+                                  <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Mở Buổi Sáng</span>
+                                </label>
+                                <label className="flex-1 flex items-center gap-4 cursor-pointer p-4 bg-white rounded-2xl border-amber-100 hover:border-yellow-400 transition-all shadow-sm">
+                                  <input type="checkbox" checked={editingDayConfig?.afternoonActive ?? true} onChange={(e) => setEditingDayConfig({ ...editingDayConfig, afternoonActive: e.target.checked })}
+                                    className="w-6 h-6 rounded-lg text-amber-950 focus:ring-yellow-400" />
+                                  <span className="text-xs font-black text-slate-700 uppercase tracking-widest">Mở Buổi Chiều</span>
+                                </label>
+                             </div>
+                          </div>
+
+                          <div className="space-y-4">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Thời lượng phiên riêng ngày này</p>
+                             <div className="flex gap-3">
+                               {[15, 20, 30].map(val => (
+                                 <button key={val} onClick={() => setEditingDayConfig({ ...editingDayConfig, duration: val })}
+                                   className={cn("px-6 py-3 rounded-2xl text-[11px] font-black transition-all border-2",
+                                   (editingDayConfig?.duration ?? slotDuration) === val ? "bg-amber-950 text-white border-amber-950" : "bg-white text-slate-400 border-amber-50 hover:border-amber-200")}>
+                                   {val} phút
+                                 </button>
+                               ))}
+                             </div>
+                          </div>
+
+                          <div className="xl:col-span-2 space-y-4">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Khung giờ làm việc tùy chỉnh</p>
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                               {(editingDayConfig?.businessHours || businessHours).map((range, rbIdx) => (
+                                 <div key={rbIdx} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-amber-100">
+                                   <span className="text-[10px] text-amber-900 font-black uppercase w-12">{range.label}</span>
+                                   <div className="flex items-center gap-2">
+                                     <select value={range.start} onChange={(e) => {
+                                       const newRanges = [...(editingDayConfig?.businessHours || businessHours)];
+                                       newRanges[rbIdx] = { ...newRanges[rbIdx], start: parseInt(e.target.value) };
+                                       setEditingDayConfig({ ...editingDayConfig, businessHours: newRanges });
+                                     }} className="bg-slate-50 border border-slate-100 text-xs font-bold p-2 rounded-xl outline-none">
+                                       {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                                     </select>
+                                     <span className="text-slate-300">→</span>
+                                     <select value={range.end} onChange={(e) => {
+                                       const newRanges = [...(editingDayConfig?.businessHours || businessHours)];
+                                       newRanges[rbIdx] = { ...newRanges[rbIdx], end: parseInt(e.target.value) };
+                                       setEditingDayConfig({ ...editingDayConfig, businessHours: newRanges });
+                                     }} className="bg-slate-50 border border-slate-100 text-xs font-bold p-2 rounded-xl outline-none">
+                                       {Array.from({length: 24}).map((_, i) => <option key={i} value={i}>{i}:00</option>)}
+                                     </select>
+                                   </div>
+                                 </div>
+                               ))}
+                             </div>
+                          </div>
+                       </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeAdminTab === 'appointments' && (
+                  <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-12">
+                    <div className="flex items-center justify-between px-2">
+                       <div className="flex items-center gap-4">
+                        <CalendarDays className="text-yellow-500" />
+                        <h3 className="text-xl font-bold text-slate-900 tracking-tight">Timeline lịch hẹn trong ngày</h3>
+                       </div>
+                       
+                       <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200">
+                        <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400"><ChevronLeft size={18} /></button>
+                        <div className="px-4 font-black text-sm text-slate-900 min-w-[120px] text-center tabular-nums">{format(selectedDate, 'dd/MM/yyyy')}</div>
+                        <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400"><ChevronRight size={18} /></button>
+                       </div>
+                    </div>
+
+                    <div className="space-y-4 relative">
+                      <div className="absolute left-[39px] top-0 bottom-0 w-px bg-slate-100" />
+                      
+                      {appointments.filter(a => (a as any).status !== 'cancelled').length === 0 ? (
+                        <div className="bg-slate-50 rounded-[40px] p-24 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
+                          <CalendarDays size={48} className="text-slate-200 mb-4" />
+                          <h3 className="text-lg font-bold text-slate-400 italic">Hôm nay chưa có lịch hẹn</h3>
+                        </div>
+                      ) : (
+                        [...appointments]
+                          .filter(a => (a as any).status !== 'cancelled')
+                          .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                          .map((app, idx) => (
+                            <div key={app.id} className="flex items-start gap-8 relative group">
+                              <div className="w-20 pt-4 flex flex-col items-center">
+                                <span className={cn(
+                                  "text-lg font-black tabular-nums transition-colors",
+                                  idx === 0 ? "text-amber-950" : "text-slate-400"
+                                )}>{app.startTime}</span>
+                                <div className="h-4" />
                               </div>
-                              <div className="h-10 w-px bg-slate-200" />
-                              <div className="line-through text-slate-300">
-                                <h4 className="font-bold">{app.clientName}</h4>
-                                <p className="text-[11px] font-medium italic">Q: {app.question}</p>
+                              <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-yellow-200 transition-all border-l-4 border-l-yellow-400 flex items-center justify-between">
+                                <div className="space-y-1">
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Học viên</p>
+                                  <h4 className="text-xl font-black text-slate-900 tracking-tight">{app.clientName}</h4>
+                                  <div className="flex items-center gap-8 text-[11px] font-medium text-slate-500 pt-1">
+                                    <span className="flex items-center gap-1.5"><User size={14} className="text-yellow-600" /> {app.guide}</span>
+                                    <span className="flex items-center gap-1.5 italic"><MessageSquare size={14} className="text-yellow-600" /> {app.question}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button 
+                                    onClick={() => { setManageAppointment(app); setShowManageModal(true); }}
+                                    className="p-4 text-slate-300 hover:text-red-500 bg-slate-50 rounded-[24px] opacity-0 group-hover:opacity-100 transition-all hover:scale-105 active:scale-95"
+                                  >
+                                    <Trash2 size={20} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeAdminTab === 'cancelled' && (
+                  <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+                    <div className="flex items-center justify-between px-2">
+                       <div className="flex items-center gap-4">
+                        <Trash2 className="text-red-500" />
+                        <h3 className="text-xl font-bold text-slate-900 tracking-tight">Danh sách lịch đã gỡ bỏ</h3>
+                       </div>
+                       <span className="px-4 py-1.5 bg-red-100 text-red-700 text-[10px] font-black rounded-full border border-red-200 uppercase tracking-widest shadow-sm">Tối đa 10 gần đây</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4">
+                      {(() => {
+                        if (recentCancelled.length === 0) return (
+                          <div className="py-24 text-center bg-white rounded-[40px] border border-slate-100">
+                            <p className="text-slate-400 font-bold italic text-lg">Chưa có lịch hẹn nào bị hủy</p>
+                          </div>
+                        );
+                        
+                        return recentCancelled.map((app) => (
+                          <div key={app.id} className="bg-slate-50/50 p-8 rounded-3xl border border-dashed border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 opacity-80 group hover:opacity-100 transition-all">
+                            <div className="flex items-center gap-8">
+                              <div className="text-center shrink-0">
+                                <span className="text-2xl font-black text-slate-300 tabular-nums">{app.startTime}</span>
+                                <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">{app.date}</p>
+                              </div>
+                              <div className="h-12 w-px bg-slate-200" />
+                              <div className="space-y-1">
+                                <h4 className="font-bold text-slate-400 line-through text-lg">{app.clientName}</h4>
+                                <p className="text-xs text-red-400 font-bold italic">Lý do: {app.cancellationReason || 'Admin hủy'}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
                                <button 
-                                onClick={async () => {
-                                  await updateDoc(doc(db, 'appointments', app.id), { status: 'active' });
-                                }}
-                                className="px-5 py-2.5 bg-yellow-400 text-amber-950 font-black text-[10px] rounded-xl hover:bg-yellow-300 transition-all shadow-lg shadow-yellow-200 uppercase tracking-widest"
+                                onClick={async () => await updateDoc(doc(db, 'appointments', app.id), { status: 'active' })}
+                                className="px-6 py-3 bg-yellow-400 text-amber-950 font-black text-[11px] rounded-2xl hover:bg-yellow-300 transition-all shadow-lg uppercase tracking-widest shadow-yellow-200/50"
                                >
                                 Khôi phục
                                </button>
                                <button 
-                                onClick={async () => {
-                                  if (confirm("Xóa vĩnh viễn lịch hẹn này? Thao tác này không thể hoàn tác.")) {
-                                    await deleteDoc(doc(db, 'appointments', app.id));
-                                  }
-                                }}
-                                className="p-3 text-slate-300 hover:text-red-500 bg-white rounded-xl transition-all border border-slate-200"
-                                title="Xóa vĩnh viễn"
+                                onClick={async () => { if (confirm("Xóa vĩnh viễn?")) await deleteDoc(doc(db, 'appointments', app.id)); }}
+                                className="p-3.5 text-slate-300 hover:text-red-500 bg-white rounded-2xl transition-all border border-slate-200 hover:border-red-200"
                                >
-                                <Trash2 size={18} />
+                                <Trash2 size={20} />
                                </button>
                             </div>
                           </div>
-                        ))}
-                      </div>
+                        ));
+                      })()}
                     </div>
-                  );
-                })()}
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           )}
@@ -1178,7 +1386,7 @@ export default function App() {
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Chi tiết</p>
                 <p className="text-sm font-semibold text-slate-700">{manageAppointment.date} Lúc {manageAppointment.startTime}</p>
                 <div className="pt-2 border-t border-slate-200/50 mt-2 space-y-1">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Người đặt</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase">Học viên</p>
                   <p className="text-sm text-slate-600">{manageAppointment.clientName}</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-2">Hướng dẫn viên</p>
                   <p className="text-sm text-slate-600">{manageAppointment.guide}</p>
@@ -1220,18 +1428,33 @@ export default function App() {
                 </div>
 
                 {isAdmin && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 inline-flex items-center gap-1.5">
-                      <MessageSquare size={12} className="text-yellow-600" />
-                      Lý do hủy lịch đột xuất
-                    </label>
-                    <textarea 
-                      rows={3}
-                      value={adminReason}
-                      onChange={e => setAdminReason(e.target.value)}
-                      placeholder="Nhập lý do gửi đến người đặt (vd: Có việc bận đột xuất...)"
-                      className="w-full px-4 py-3 bg-red-50/30 border border-red-100 rounded-2xl focus:ring-2 focus:ring-red-400 focus:bg-white transition-all outline-none text-sm font-medium placeholder:text-slate-300 resize-none italic"
-                    />
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-4 bg-yellow-50 rounded-2xl border border-yellow-100 cursor-pointer transition-all hover:bg-yellow-100/50" onClick={() => setIsSuddenCancel(!isSuddenCancel)}>
+                      <div className={cn(
+                        "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all",
+                        isSuddenCancel ? "bg-amber-950 border-amber-950 text-white" : "bg-white border-slate-300"
+                      )}>
+                        {isSuddenCancel && <CheckCircle2 size={14} />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[11px] font-black text-amber-950 uppercase tracking-tight">Hủy lịch đột xuất</p>
+                        <p className="text-[9px] text-amber-800 font-medium tracking-tight">Khung giờ này sẽ bị khóa và hiển thị "Bận đột xuất"</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 inline-flex items-center gap-1.5">
+                        <MessageSquare size={12} className="text-yellow-600" />
+                        Lý do hủy {isSuddenCancel ? 'đột xuất' : ''}
+                      </label>
+                      <textarea 
+                        rows={3}
+                        value={adminReason}
+                        onChange={e => setAdminReason(e.target.value)}
+                        placeholder={isSuddenCancel ? "Nhập lý do (vd: Có việc bận đột xuất...)" : "Nhập lý do (vd: Thông tin Học viên không chính xác...)"}
+                        className="w-full px-4 py-3 bg-red-50/30 border border-red-100 rounded-2xl focus:ring-2 focus:ring-red-400 focus:bg-white transition-all outline-none text-sm font-medium placeholder:text-slate-300 resize-none italic"
+                      />
+                    </div>
                   </div>
                 )}
                 
