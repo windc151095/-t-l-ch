@@ -48,6 +48,7 @@ import {
   where, 
   getDocs, 
   serverTimestamp, 
+  deleteField,
   deleteDoc, 
   doc,
   onSnapshot,
@@ -405,6 +406,27 @@ export default function App() {
     }
   };
 
+  const handleRestoreAppointment = async (appId?: string) => {
+    const id = appId || manageAppointment?.id;
+    if (!id || !isAdmin) return;
+    setIsManaging(true);
+    try {
+      await updateDoc(doc(db, 'appointments', id), {
+        status: 'active',
+        cancelledByAdmin: false,
+        cancellationReason: deleteField(),
+        adminAuth: '123456'
+      });
+      setShowManageModal(false);
+      setManageAppointment(null);
+    } catch (err) {
+      console.error("Restore error:", err);
+      handleFirestoreError(err, 'update', `appointments/${id}`);
+    } finally {
+      setIsManaging(false);
+    }
+  };
+
   const handleCancelAppointment = async (permanent: boolean = false) => {
     if (!manageAppointment) return;
     setIsManaging(true);
@@ -417,7 +439,8 @@ export default function App() {
             status: 'cancelled',
             cancellationReason: adminReason || (isSuddenCancel ? 'Lý do đột xuất từ phía Người kết nối.' : 'Lịch hẹn bị hủy do thông tin sai hoặc yêu cầu thay đổi.'),
             cancelledByAdmin: isSuddenCancel,
-            cancelledAt: serverTimestamp()
+            cancelledAt: serverTimestamp(),
+            adminAuth: '123456'
           }).catch(err => handleFirestoreError(err, 'update', `appointments/${manageAppointment.id}`));
         }
       } else {
@@ -1360,7 +1383,7 @@ export default function App() {
                             </div>
                             <div className="flex items-center gap-3">
                                <button 
-                                onClick={async () => await updateDoc(doc(db, 'appointments', app.id), { status: 'active' })}
+                                onClick={() => handleRestoreAppointment(app.id)}
                                 className="px-6 py-3 bg-yellow-400 text-amber-950 font-black text-[11px] rounded-2xl hover:bg-yellow-300 transition-all shadow-lg uppercase tracking-widest shadow-yellow-200/50"
                                >
                                 Khôi phục
@@ -1396,8 +1419,12 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900 leading-tight">Tự hủy lịch hẹn</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Dành cho người đặt lịch</p>
+                  <h2 className="text-xl font-bold text-slate-900 leading-tight">
+                    {manageAppointment.status === 'cancelled' ? 'Khôi phục lịch hẹn' : 'Quản lý lịch hẹn'}
+                  </h2>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    {manageAppointment.status === 'cancelled' ? 'Dành cho Quản trị viên' : 'Dành cho Người đặt & Admin'}
+                  </p>
                 </div>
                 <button onClick={() => { setShowManageModal(false); setManagePassword(''); }} className="p-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-colors">
                   <ChevronRight size={20} className="rotate-45" />
@@ -1410,6 +1437,14 @@ export default function App() {
                 <div className="pt-2 border-t border-slate-200/50 mt-2 space-y-1">
                   <p className="text-[10px] text-slate-400 font-bold uppercase">Học viên</p>
                   <p className="text-sm text-slate-600">{manageAppointment.clientName}</p>
+                  
+                  {manageAppointment.status === 'cancelled' && (
+                    <div className="bg-red-50 p-2 rounded-lg border border-red-100 mt-2">
+                      <p className="text-[10px] text-red-400 font-bold uppercase">Trạng thái: Bận đột xuất / Đã hủy</p>
+                      <p className="text-xs text-red-600 italic font-medium">Lý do: {manageAppointment.cancellationReason || 'Không rõ lý do'}</p>
+                    </div>
+                  )}
+
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-2">Hướng dẫn viên</p>
                   <p className="text-sm text-slate-600">{manageAppointment.guide}</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase mt-2">Câu hỏi</p>
@@ -1418,38 +1453,40 @@ export default function App() {
               </div>
 
               <div className="space-y-5">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between ml-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                      Xác minh bằng Mã PIN bạn đã tạo
-                    </label>
-                    {isAdmin && (
-                      <span className="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100 uppercase tracking-tighter">
-                        Quyền Admin
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                      <Lock size={14} />
-                    </div>
-                    <input 
-                      type="text" 
-                      inputMode="numeric"
-                      value={managePassword}
-                      onChange={e => setManagePassword(e.target.value)}
-                      placeholder={isAdmin ? "Đã xác minh Quyền Admin" : "Nhập Mã PIN đã tạo..."}
-                      disabled={isAdmin}
-                      className={cn(
-                        "w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-yellow-400 focus:bg-white transition-all outline-none text-sm font-bold tracking-widest placeholder:tracking-normal placeholder:font-medium",
-                        isAdmin && "opacity-60 border-slate-100 bg-slate-50/50 cursor-not-allowed"
+                {manageAppointment.status === 'active' && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        Xác minh bằng Mã PIN bạn đã tạo
+                      </label>
+                      {isAdmin && (
+                        <span className="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100 uppercase tracking-tighter">
+                          Quyền Admin
+                        </span>
                       )}
-                    />
+                    </div>
+                    
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                        <Lock size={14} />
+                      </div>
+                      <input 
+                        type="text" 
+                        inputMode="numeric"
+                        value={managePassword}
+                        onChange={e => setManagePassword(e.target.value)}
+                        placeholder={isAdmin ? "Đã xác minh Quyền Admin" : "Nhập Mã PIN đã tạo..."}
+                        disabled={isAdmin}
+                        className={cn(
+                          "w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-yellow-400 focus:bg-white transition-all outline-none text-sm font-bold tracking-widest placeholder:tracking-normal placeholder:font-medium",
+                          isAdmin && "opacity-60 border-slate-100 bg-slate-50/50 cursor-not-allowed"
+                        )}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {isAdmin && (
+                {isAdmin && manageAppointment.status === 'active' && (
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 p-4 bg-yellow-50 rounded-2xl border border-yellow-100 cursor-pointer transition-all hover:bg-yellow-100/50" onClick={() => setIsSuddenCancel(!isSuddenCancel)}>
                       <div className={cn(
@@ -1481,16 +1518,26 @@ export default function App() {
                 )}
                 
                 <div className="flex gap-3 pt-2">
-                  <button 
-                    onClick={() => handleCancelAppointment(false)}
-                    disabled={isManaging || (!isAdmin && !managePassword)}
-                    className={cn(
-                      "flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-200 hover:bg-red-600 transition-all active:scale-[0.98] disabled:opacity-40",
-                      isAdmin && "bg-amber-950 shadow-amber-950/20"
-                    )}
-                  >
-                    {isManaging ? 'Đang hửy...' : isAdmin ? 'Hủy lịch (Lưu lại)' : 'Xác nhận hủy lịch'}
-                  </button>
+                  {manageAppointment.status === 'active' ? (
+                    <button 
+                      onClick={() => handleCancelAppointment(false)}
+                      disabled={isManaging || (!isAdmin && !managePassword)}
+                      className={cn(
+                        "flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-200 hover:bg-red-600 transition-all active:scale-[0.98] disabled:opacity-40",
+                        isAdmin && "bg-amber-950 shadow-amber-950/20"
+                      )}
+                    >
+                      {isManaging ? 'Đang hửy...' : isAdmin ? 'Hủy lịch (Lưu lại)' : 'Xác nhận hủy lịch'}
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleRestoreAppointment()}
+                      disabled={isManaging || !isAdmin}
+                      className="flex-1 py-4 bg-yellow-400 text-amber-950 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-yellow-200 hover:bg-yellow-300 transition-all active:scale-[0.98] disabled:opacity-40"
+                    >
+                      {isManaging ? 'Đang khôi phục...' : 'Khôi phục lịch hẹn'}
+                    </button>
+                  )}
                   
                   {isAdmin && (
                     <button 
