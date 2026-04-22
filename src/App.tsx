@@ -717,6 +717,54 @@ export default function App() {
                 </div>
               </section>
 
+              {/* Instruction Video Section */}
+              <section className="bg-white rounded-[40px] overflow-hidden border border-yellow-200 shadow-xl shadow-yellow-100/50">
+                <div className="grid grid-cols-1 lg:grid-cols-2 group">
+                  <div className="p-8 lg:p-12 flex flex-col justify-center space-y-6">
+                    <div className="flex items-center gap-3">
+                      <span className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-red-200">
+                        <Calendar size={20} />
+                      </span>
+                      <div>
+                        <h3 className="text-xs font-bold text-red-600 uppercase tracking-widest leading-none mb-1">Hướng dẫn</h3>
+                        <p className="text-xl font-black text-slate-900 tracking-tight leading-none uppercase">Cách đặt lịch kết nối</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                        Xem video ngắn này để biết cách chọn khung giờ, điền thông tin và xác nhận lịch hẹn của bạn một cách nhanh chóng nhất.
+                      </p>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-5 h-5 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-[10px] font-black">1</div>
+                          <p className="text-xs font-bold text-slate-700">Chọn ngày & khung giờ trống (màu trắng)</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-5 h-5 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-[10px] font-black">2</div>
+                          <p className="text-xs font-bold text-slate-700">Nhập Họ tên, Mã PIN & Câu hỏi cần giải đáp</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-5 h-5 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-[10px] font-black">3</div>
+                          <p className="text-xs font-bold text-slate-700">Xác nhận "Lưu lịch" & ghi nhớ Mã PIN để quản lý</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="relative aspect-video lg:aspect-auto bg-slate-900 overflow-hidden">
+                    <iframe
+                      className="absolute inset-0 w-full h-full lg:h-[400px]"
+                      src="https://www.youtube.com/embed/yzqZqit4TZ8"
+                      title="YouTube video player"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                </div>
+              </section>
+
               <div className="flex flex-col lg:flex-row gap-8">
                 {/* Left Column: Selection Panel */}
                 <div id="selection-panel" className="w-full lg:w-[450px] bg-white rounded-[40px] p-8 lg:p-10 space-y-12 border border-yellow-200 shadow-xl shadow-yellow-100/50">
