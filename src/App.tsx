@@ -39,7 +39,8 @@ import {
   Plus,
   Settings,
   Edit3,
-  Calendar
+  Calendar,
+  Play
 } from 'lucide-react';
 import { 
   collection, 
@@ -122,6 +123,12 @@ export default function App() {
   const [isAdminMessageVisible, setIsAdminMessageVisible] = useState(true);
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
   const [activeAdminTab, setActiveAdminTab] = useState<'config' | 'appointments' | 'cancelled'>('appointments');
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 10000); // update every 10 seconds for smoothness
+    return () => clearInterval(timer);
+  }, []);
 
   const isAdmin = isFirebaseAdmin || isStaticAdmin;
 
@@ -546,13 +553,14 @@ export default function App() {
             <button 
               onClick={() => setView(view === 'booking' ? 'admin' : 'booking')}
               className={cn(
-                "px-4 py-2 rounded-xl text-sm font-bold transition-all duration-200 shadow-sm border",
+                "w-10 h-10 rounded-full transition-all duration-300 flex items-center justify-center shadow-lg active:scale-90 border-2",
                 view === 'admin' 
-                  ? "bg-yellow-400 text-amber-950 border-yellow-400" 
-                  : "bg-white text-slate-600 border-slate-200 hover:border-yellow-400"
+                  ? "bg-yellow-400 border-amber-500 text-amber-900" 
+                  : "bg-yellow-100 border-yellow-300 text-yellow-700 hover:bg-yellow-200"
               )}
+              title={view === 'booking' ? 'Mở bảng quản trị' : 'Về trang đặt lịch'}
             >
-              {view === 'booking' ? 'Admin quản trị' : 'Quay lại'}
+              <User size={20} strokeWidth={2.5} />
             </button>
           )}
 
@@ -573,11 +581,7 @@ export default function App() {
               {user && (
                 <img src={user.photoURL || ''} alt="" className="w-8 h-8 rounded-full border border-yellow-400 shadow-sm" referrerPolicy="no-referrer" />
               )}
-              {isStaticAdmin && !user && (
-                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-700 border border-yellow-200">
-                  <User size={14} />
-                </div>
-              )}
+              {isStaticAdmin && !user && null}
               <button 
                 onClick={user ? logout : handleSimpleLogout} 
                 className="p-2 text-slate-400 hover:text-yellow-600 transition-colors"
@@ -630,13 +634,34 @@ export default function App() {
             >
               {/* Dashboard Overview - TOP */}
               <section className="bg-white rounded-[40px] p-8 lg:p-12 border border-yellow-200 shadow-xl shadow-yellow-100/50">
-                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
-                  <div>
-                    <h3 className="text-xs font-bold text-yellow-600 uppercase tracking-[0.2em] mb-2">Tổng quan lịch hẹn</h3>
-                    <h4 className="text-4xl lg:text-5xl font-serif font-black text-slate-900 tracking-tight">
-                      {format(selectedDate, 'eeee, dd/MM', { locale: vi })}
-                    </h4>
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
+                  <div className="space-y-2">
+                    <h3 className="text-[10px] font-black text-yellow-600 uppercase tracking-[0.3em]">Tổng quan lịch hẹn</h3>
+                    <div className="flex items-center gap-2">
+                       <h4 className="text-3xl lg:text-4xl font-serif font-black text-slate-900 tracking-tight leading-none capitalize">
+                        {format(selectedDate, 'eeee, dd/MM', { locale: vi })}
+                      </h4>
+
+                      <div className="flex items-center ml-2">
+                        <button 
+                          onClick={() => { setSelectedDate(addDays(selectedDate, -1)); setSelectedSlot(null); }}
+                          className="p-2 text-slate-300 hover:text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all active:scale-90"
+                          title="Ngày trước"
+                        >
+                          <ChevronLeft size={24} strokeWidth={2.5} />
+                        </button>
+
+                        <button 
+                          onClick={() => { setSelectedDate(addDays(selectedDate, 1)); setSelectedSlot(null); }}
+                          className="p-2 text-slate-300 hover:text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all active:scale-90"
+                          title="Ngày mai"
+                        >
+                          <ChevronRight size={24} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
+                  
                   <div className="flex items-center gap-6">
                     <div className="text-left px-6 py-3 bg-yellow-400/10 rounded-2xl border border-yellow-200">
                       <p className="text-sm font-black text-amber-950 leading-tight">{appointments.filter(a => (a as any).status !== 'cancelled').length} phiên</p>
@@ -661,106 +686,156 @@ export default function App() {
                     appointments
                       .filter(a => a.status === 'active' || (a.status === 'cancelled' && a.cancelledByAdmin))
                       .sort((a,b) => a.startTime.localeCompare(b.startTime))
-                      .map((app) => (
-                        <div key={app.id} className={cn(
-                          "p-4 rounded-2xl border transition-all flex items-start justify-between gap-4 group",
-                          app.status === 'cancelled' 
-                            ? "bg-red-50/50 border-red-100 opacity-80" 
-                            : "bg-slate-50/50 border-white shadow-sm hover:border-yellow-300 hover:bg-yellow-50"
-                        )}>
-                          <div className="flex items-start gap-4 overflow-hidden">
-                            <div className={cn(
-                              "px-3 py-2 rounded-xl font-mono text-sm font-black shadow-lg shrink-0",
-                              app.status === 'cancelled' 
-                                ? "bg-red-400 text-white shadow-red-100" 
-                                : "bg-yellow-400 text-amber-950 shadow-yellow-200"
-                            )}>
-                              {app.startTime}
-                            </div>
-                            <div className="overflow-hidden">
-                              <div className="flex items-center gap-2">
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">Học viên</p>
-                                {app.status === 'cancelled' && (
-                                  <span className="text-[8px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Đã hủy</span>
+                      .map((app) => {
+                        const isSelectedToday = isSameDay(selectedDate, new Date());
+                        const currentTimeStr = format(now, 'HH:mm');
+                        const isPastApp = isSelectedToday && (app.endTime || '23:59') <= currentTimeStr;
+                        const isInProgress = isSelectedToday && currentTimeStr >= app.startTime && currentTimeStr < (app.endTime || '23:59');
+
+                        return (
+                          <div key={app.id} className={cn(
+                            "p-4 rounded-2xl border transition-all flex items-start justify-between gap-4 group relative",
+                            app.status === 'cancelled' 
+                              ? "bg-red-50/50 border-red-100 opacity-80" 
+                              : isInProgress
+                                ? "bg-yellow-50 border-yellow-400 shadow-lg shadow-yellow-100 ring-2 ring-yellow-200"
+                                : isPastApp
+                                  ? "bg-slate-50 border-slate-100 opacity-40 grayscale"
+                                  : "bg-slate-50/50 border-white shadow-sm hover:border-yellow-300 hover:bg-yellow-50"
+                          )}>
+                            <div className="flex items-start gap-4 overflow-hidden w-full">
+                              <div className={cn(
+                                "px-3 py-2 rounded-xl font-mono text-sm font-black shadow-lg shrink-0",
+                                app.status === 'cancelled' 
+                                  ? "bg-red-400 text-white shadow-red-100" 
+                                  : isInProgress
+                                    ? "bg-yellow-400 text-amber-950 shadow-yellow-200 animate-pulse"
+                                    : "bg-yellow-400 text-amber-950 shadow-yellow-200"
+                              )}>
+                                {app.startTime}
+                              </div>
+                              <div className="overflow-hidden flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">
+                                    {isInProgress ? 'Đang diễn ra' : isPastApp ? 'Đã kết thúc' : 'Học viên'}
+                                  </p>
+                                  {app.status === 'cancelled' && (
+                                    <span className="text-[8px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Đã hủy</span>
+                                  )}
+                                </div>
+                                <h5 className={cn("font-bold truncate leading-tight", app.status === 'cancelled' || isPastApp ? "text-slate-500 line-through" : "text-slate-900")}>
+                                  {app.clientName}
+                                </h5>
+                                <p className={cn("text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 mt-1", isInProgress ? "text-yellow-700" : "text-yellow-600")}>
+                                  {app.guide}
+                                </p>
+                                {app.status === 'cancelled' && app.cancellationReason && (
+                                  <div className="mt-2 p-2 bg-red-50 rounded-lg border border-red-100">
+                                    <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest mb-1">Lý do từ Người kết nối:</p>
+                                    <p className="text-[10px] text-red-700 italic leading-snug">{app.cancellationReason}</p>
+                                  </div>
                                 )}
                               </div>
-                              <h5 className={cn("font-bold truncate leading-tight", app.status === 'cancelled' ? "text-slate-500 line-through" : "text-slate-900")}>
-                                {app.clientName}
-                              </h5>
-                              <p className="text-[10px] text-yellow-600 font-bold uppercase tracking-wider flex items-center gap-1 mt-1">
-                                {app.guide}
-                              </p>
-                              {app.status === 'cancelled' && app.cancellationReason && (
-                                <div className="mt-2 p-2 bg-red-50 rounded-lg border border-red-100">
-                                  <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest mb-1">Lý do từ Người kết nối:</p>
-                                  <p className="text-[10px] text-red-700 italic leading-snug">{app.cancellationReason}</p>
-                                </div>
-                              )}
                             </div>
+                            {app.status !== 'cancelled' && !isPastApp && (
+                              <button 
+                                onClick={() => {
+                                  setManageAppointment(app);
+                                  setShowManageModal(true);
+                                }}
+                                className="flex flex-col items-center gap-1 p-2 text-slate-300 hover:text-red-500 transition-all shrink-0 hover:bg-red-50 rounded-xl"
+                                title="Tự hủy lịch"
+                              >
+                                <Trash2 size={16} />
+                                <span className="text-[8px] font-black uppercase tracking-tighter">Hủy</span>
+                              </button>
+                            )}
                           </div>
-                          {app.status !== 'cancelled' && (
-                            <button 
-                              onClick={() => {
-                                setManageAppointment(app);
-                                setShowManageModal(true);
-                              }}
-                              className="flex flex-col items-center gap-1 p-2 text-slate-300 hover:text-red-500 transition-all shrink-0 hover:bg-red-50 rounded-xl"
-                              title="Tự hủy lịch"
-                            >
-                              <Trash2 size={16} />
-                              <span className="text-[8px] font-black uppercase tracking-tighter">Hủy</span>
-                            </button>
-                          )}
-                        </div>
-                      ))
+                        );
+                      })
                   )}
                 </div>
               </section>
 
-              {/* Instruction Video Section */}
-              <section className="bg-white rounded-[40px] overflow-hidden border border-yellow-200 shadow-xl shadow-yellow-100/50">
-                <div className="grid grid-cols-1 lg:grid-cols-2 group">
-                  <div className="p-8 lg:p-12 flex flex-col justify-center space-y-6">
-                    <div className="flex items-center gap-3">
-                      <span className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-red-200">
-                        <Calendar size={20} />
-                      </span>
+              {/* Instruction Guide Section */}
+              <section className="bg-white rounded-[40px] border border-yellow-200 shadow-xl shadow-yellow-100/50 p-8 lg:p-12">
+                <div className="flex flex-col lg:flex-row gap-12">
+                  <div className="lg:w-1/3 space-y-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-yellow-400 rounded-2xl flex items-center justify-center text-amber-950 shadow-lg shadow-yellow-100">
+                        <Edit3 size={24} />
+                      </div>
                       <div>
-                        <h3 className="text-xs font-bold text-red-600 uppercase tracking-widest leading-none mb-1">Hướng dẫn</h3>
-                        <p className="text-xl font-black text-slate-900 tracking-tight leading-none uppercase">Cách đặt lịch kết nối</p>
+                        <h3 className="text-xs font-black text-yellow-600 uppercase tracking-widest mb-1">Hướng dẫn</h3>
+                        <p className="text-2xl font-black text-slate-900 leading-none">3 BƯỚC ĐẶT LỊCH</p>
                       </div>
                     </div>
+                    <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                      Chỉ mất 1 phút để kết nối. Vui lòng thực hiện theo các bước bên phải để đảm bảo lịch hẹn được ghi nhận thành công.
+                    </p>
                     
-                    <div className="space-y-4">
-                      <p className="text-sm text-slate-500 leading-relaxed font-medium">
-                        Xem video ngắn này để biết cách chọn khung giờ, điền thông tin và xác nhận lịch hẹn của bạn một cách nhanh chóng nhất.
-                      </p>
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-5 h-5 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-[10px] font-black">1</div>
-                          <p className="text-xs font-bold text-slate-700">Chọn ngày & khung giờ trống (màu trắng)</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-5 h-5 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-[10px] font-black">2</div>
-                          <p className="text-xs font-bold text-slate-700">Nhập Họ tên, Mã PIN & Câu hỏi cần giải đáp</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="w-5 h-5 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-[10px] font-black">3</div>
-                          <p className="text-xs font-bold text-slate-700">Xác nhận "Lưu lịch" & ghi nhớ Mã PIN để quản lý</p>
-                        </div>
+                    <div className="pt-6 border-t border-slate-100 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 size={18} className="text-green-500 shrink-0" />
+                        <p className="text-xs font-bold text-slate-600 italic">Lịch hẹn sẽ được gửi xác nhận ngay sau khi lưu.</p>
                       </div>
+                      <div className="bg-yellow-50 p-4 rounded-2xl border border-yellow-100 space-y-2">
+                         <p className="text-[10px] font-black text-yellow-700 uppercase tracking-widest flex items-center gap-2">
+                           Lưu ý quan trọng
+                         </p>
+                         <p className="text-[11px] text-yellow-800 font-medium leading-normal">
+                           - Mỗi mã PIN là duy nhất để bảo mật lịch của bạn.<br/>
+                           - Vui lòng kiểm tra kỹ khung giờ "Sáng" hoặc "Chiều" trước khi chọn.
+                         </p>
+                      </div>
+                      <button 
+                        onClick={() => window.open('https://youtu.be/yzqZqit4TZ8', '_blank')}
+                        className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-red-100 hover:bg-red-700 transition-all flex items-center justify-center gap-3 active:scale-95"
+                      >
+                        <Play size={16} fill="currentColor" />
+                        Xem Video Hướng Dẫn
+                      </button>
                     </div>
                   </div>
-                  
-                  <div className="relative aspect-video lg:aspect-auto bg-slate-900 overflow-hidden">
-                    <iframe
-                      className="absolute inset-0 w-full h-full lg:h-[400px]"
-                      src="https://www.youtube.com/embed/yzqZqit4TZ8"
-                      title="YouTube video player"
-                      frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                    ></iframe>
+
+                  <div className="lg:w-2/3 grid grid-cols-1 sm:grid-cols-3 gap-6 relative">
+                    {/* Step 1 */}
+                    <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-yellow-300 transition-colors group">
+                      <div className="absolute -top-3 -left-3 w-8 h-8 bg-white border-2 border-yellow-400 rounded-full flex items-center justify-center text-sm font-black text-yellow-600 shadow-sm">1</div>
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 mb-4 shadow-sm group-hover:text-yellow-500 transition-colors">
+                        <CalendarDays size={20} />
+                      </div>
+                      <h4 className="font-black text-slate-900 text-sm mb-2 uppercase tracking-tight">Chọn ngày</h4>
+                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Sử dụng lịch bên dưới để chọn ngày bạn muốn kết nối.</p>
+                    </div>
+
+                    {/* Step 2 */}
+                    <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-yellow-300 transition-colors group">
+                      <div className="absolute -top-3 -left-3 w-8 h-8 bg-white border-2 border-yellow-400 rounded-full flex items-center justify-center text-sm font-black text-yellow-600 shadow-sm">2</div>
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 mb-4 shadow-sm group-hover:text-yellow-500 transition-colors">
+                        <Clock size={20} />
+                      </div>
+                      <h4 className="font-black text-slate-900 text-sm mb-2 uppercase tracking-tight">Chọn giờ</h4>
+                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Chọn các ô khung giờ còn trống (màu trắng) phù hợp với bạn.</p>
+                    </div>
+
+                    {/* Step 3 */}
+                    <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-yellow-300 transition-colors group">
+                      <div className="absolute -top-3 -left-3 w-8 h-8 bg-white border-2 border-yellow-400 rounded-full flex items-center justify-center text-sm font-black text-yellow-600 shadow-sm">3</div>
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 mb-4 shadow-sm group-hover:text-yellow-500 transition-colors font-black uppercase text-[10px]">
+                        PIN
+                      </div>
+                      <h4 className="font-black text-slate-900 text-sm mb-2 uppercase tracking-tight">Nhập PIN</h4>
+                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Điền thông tin & Mã PIN để bảo mật & quản lý lịch sau này.</p>
+                    </div>
+
+                    {/* Desktop Connector Arrows */}
+                    <div className="hidden sm:block absolute top-1/2 left-1/3 -translate-y-1/2 -ml-3 text-yellow-200">
+                      <ChevronRight size={20} />
+                    </div>
+                    <div className="hidden sm:block absolute top-1/2 left-2/3 -translate-y-1/2 -ml-3 text-yellow-200">
+                      <ChevronRight size={20} />
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1345,37 +1420,72 @@ export default function App() {
                         <h3 className="text-xl font-bold text-slate-900 tracking-tight">Timeline lịch hẹn trong ngày</h3>
                        </div>
                        
-                       <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200">
-                        <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400"><ChevronLeft size={18} /></button>
-                        <div className="px-4 font-black text-sm text-slate-900 min-w-[120px] text-center tabular-nums">{format(selectedDate, 'dd/MM/yyyy')}</div>
-                        <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="p-2 hover:bg-slate-50 rounded-xl text-slate-400"><ChevronRight size={18} /></button>
+                       <div className="flex items-center gap-4">
+                         <div className="px-4 py-2 bg-yellow-100 rounded-xl border border-yellow-200">
+                           <p className="text-[10px] font-black text-yellow-700 uppercase tracking-widest">Giờ hiện tại</p>
+                           <p className="text-sm font-black text-amber-950 tabular-nums">{format(now, 'HH:mm:ss')}</p>
+                         </div>
+                         <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-200">
+                           <div className="px-4 font-black text-sm text-slate-900 tabular-nums border-r border-slate-100 mr-1">{format(selectedDate, 'dd/MM/yyyy')}</div>
+                           <div className="flex items-center">
+                            <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400" title="Ngày trước"><ChevronLeft size={16} /></button>
+                            <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400" title="Ngày mai"><ChevronRight size={18} /></button>
+                           </div>
+                         </div>
                        </div>
                     </div>
 
                     <div className="space-y-4 relative">
                       <div className="absolute left-[39px] top-0 bottom-0 w-px bg-slate-100" />
                       
-                      {appointments.filter(a => (a as any).status !== 'cancelled').length === 0 ? (
-                        <div className="bg-slate-50 rounded-[40px] p-24 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
-                          <CalendarDays size={48} className="text-slate-200 mb-4" />
-                          <h3 className="text-lg font-bold text-slate-400 italic">Hôm nay chưa có lịch hẹn</h3>
-                        </div>
-                      ) : (
-                        [...appointments]
+                      {(() => {
+                        const isSelectedToday = isSameDay(selectedDate, new Date());
+                        const currentTimeStr = format(now, 'HH:mm');
+                        
+                        const filteredApps = [...appointments]
                           .filter(a => (a as any).status !== 'cancelled')
-                          .sort((a, b) => a.startTime.localeCompare(b.startTime))
-                          .map((app, idx) => (
+                          .filter(a => {
+                            if (!isSelectedToday) return true;
+                            // Hide if end time is past
+                            return (a.endTime || '23:59') > currentTimeStr;
+                          })
+                          .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+                        if (filteredApps.length === 0) return (
+                          <div className="bg-slate-50 rounded-[40px] p-24 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
+                            <CalendarDays size={48} className="text-slate-200 mb-4" />
+                            <h3 className="text-lg font-bold text-slate-400 italic">Hôm nay chưa có lịch hẹn</h3>
+                          </div>
+                        );
+
+                        return filteredApps.map((app, idx) => {
+                          const isInProgress = isSelectedToday && currentTimeStr >= app.startTime && currentTimeStr < (app.endTime || '23:59');
+                          
+                          return (
                             <div key={app.id} className="flex items-start gap-8 relative group">
                               <div className="w-20 pt-4 flex flex-col items-center">
                                 <span className={cn(
                                   "text-lg font-black tabular-nums transition-colors",
-                                  idx === 0 ? "text-amber-950" : "text-slate-400"
+                                  isInProgress ? "text-yellow-600" : "text-slate-400"
                                 )}>{app.startTime}</span>
+                                {isInProgress && <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse mt-2" />}
                                 <div className="h-4" />
                               </div>
-                              <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-yellow-200 transition-all border-l-4 border-l-yellow-400 flex items-center justify-between">
+                              <div className={cn(
+                                "flex-1 p-6 rounded-3xl border transition-all flex items-center justify-between",
+                                isInProgress 
+                                  ? "bg-yellow-50 border-yellow-200 shadow-lg shadow-yellow-100/50 border-l-[6px] border-l-yellow-400" 
+                                  : "bg-white border-slate-100 shadow-sm hover:shadow-xl hover:border-yellow-200 border-l-4 border-l-slate-200"
+                              )}>
                                 <div className="space-y-1">
-                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Học viên</p>
+                                  <div className="flex items-center gap-3">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Học viên</p>
+                                    {isInProgress && (
+                                      <span className="px-2 py-0.5 bg-yellow-400 text-amber-950 text-[8px] font-black rounded-full uppercase tracking-tighter animate-pulse">
+                                        Đang diễn ra
+                                      </span>
+                                    )}
+                                  </div>
                                   <h4 className="text-xl font-black text-slate-900 tracking-tight">{app.clientName}</h4>
                                   <div className="flex items-center gap-8 text-[11px] font-medium text-slate-500 pt-1">
                                     <span className="flex items-center gap-1.5"><User size={14} className="text-yellow-600" /> {app.guide}</span>
@@ -1392,8 +1502,9 @@ export default function App() {
                                 </div>
                               </div>
                             </div>
-                          ))
-                      )}
+                          );
+                        });
+                      })()}
                     </div>
                   </motion.div>
                 )}
