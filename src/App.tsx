@@ -379,6 +379,40 @@ export default function App() {
 
   const slots = generateSlots();
 
+  // Auto-switch to tomorrow if today's schedule is finished
+  useEffect(() => {
+    if (view !== 'booking') return;
+    
+    const today = startOfDay(new Date());
+    if (isSameDay(selectedDate, today)) {
+      const currentTimeStr = format(now, 'HH:mm');
+      
+      // 1. Check for upcoming active appointments
+      const upcomingApps = appointments.filter(a => 
+        a.status === 'active' && 
+        (a.endTime || '23:59') > currentTimeStr
+      );
+      
+      // 2. Check for bookable slots
+      const takenSlotStartTimes = new Set(appointments.filter(a => a.status !== 'cancelled').map(a => a.startTime));
+      const availableSlots = slots.filter(s => {
+        const isPastSlot = s <= currentTimeStr;
+        return !takenSlotStartTimes.has(s) && !isPastSlot && !lockedSlots.some(l => l.startTime === s);
+      });
+
+      // If today is effectively "over" for connections (no upcoming apps and no available slots)
+      // We check if it's already mid-day or later to avoid jumping too early if data is still loading
+      if (upcomingApps.length === 0 && availableSlots.length === 0) {
+        // Only switch if it's actually past some business hours or we have confirmation data is loaded
+        // To be safe, we check if slots list was at least generated (today had slots)
+        const totalSlotsToday = slots.length;
+        if (totalSlotsToday > 0) {
+          setSelectedDate(addDays(today, 1));
+        }
+      }
+    }
+  }, [selectedDate, appointments, slots, lockedSlots, now, view]);
+
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSlot) return;
