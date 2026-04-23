@@ -122,6 +122,7 @@ export default function App() {
   const [allDayConfigs, setAllDayConfigs] = useState<{ [key: string]: DayConfig }>({});
   const [announcement, setAnnouncement] = useState('');
   const [isAdminMessageVisible, setIsAdminMessageVisible] = useState(true);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
   const [activeAdminTab, setActiveAdminTab] = useState<'config' | 'appointments' | 'cancelled'>('appointments');
   const [now, setNow] = useState(new Date());
@@ -568,18 +569,6 @@ export default function App() {
             </button>
           )}
 
-          <button 
-            onClick={() => {
-              setSelectedSlot(null);
-              const el = document.getElementById('selection-panel');
-              el?.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-amber-950 rounded-xl text-sm font-bold hover:bg-yellow-300 shadow-lg shadow-yellow-200 transition-all active:scale-95"
-          >
-            <Plus size={16} />
-            Đặt Lịch
-          </button>
-          
           {(user || isStaticAdmin) && (
             <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
               {user && (
@@ -637,7 +626,17 @@ export default function App() {
               className="space-y-8"
             >
               {/* Dashboard Overview - TOP */}
-              <section className="bg-white rounded-[40px] p-8 lg:p-12 border border-yellow-200 shadow-xl shadow-yellow-100/50">
+              <section className="bg-white rounded-[40px] p-8 lg:p-12 border border-yellow-200 shadow-xl shadow-yellow-100/50 relative">
+                {/* Floating Add Button for Overview */}
+                <button
+                  onClick={() => setOverviewTab('empty')}
+                  className="absolute -top-3 -right-3 px-5 py-2.5 bg-amber-950 text-yellow-400 rounded-[18px] flex flex-col items-center justify-center gap-0.5 shadow-2xl hover:scale-105 active:scale-95 transition-all z-10 border-4 border-white"
+                  title="Mở danh sách slot trống"
+                >
+                  <Plus size={14} strokeWidth={4} />
+                  <span className="text-[9px] font-black uppercase tracking-widest whitespace-nowrap">Đặt lịch</span>
+                </button>
+
                 <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
                   <div className="space-y-2">
                     <h3 className="text-[10px] font-black text-yellow-600 uppercase tracking-[0.3em]">Tổng quan lịch hẹn</h3>
@@ -662,6 +661,14 @@ export default function App() {
                         >
                           <ChevronRight size={24} strokeWidth={2.5} />
                         </button>
+
+                        <button 
+                          onClick={() => setShowCalendarPicker(true)}
+                          className="p-2 ml-2 bg-yellow-50 text-yellow-600 hover:bg-yellow-100 rounded-xl transition-all active:scale-90 border border-yellow-100"
+                          title="Chọn ngày từ lịch"
+                        >
+                          <CalendarIcon size={20} strokeWidth={2.5} />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -672,18 +679,18 @@ export default function App() {
                       className={cn(
                         "text-left px-6 py-3 rounded-2xl border transition-all active:scale-95",
                         overviewTab === 'past' 
-                          ? "bg-amber-950 text-white border-amber-950 shadow-lg" 
+                          ? "bg-yellow-400 text-amber-950 border-yellow-400 shadow-lg" 
                           : "bg-slate-50 text-slate-600 border-slate-100 hover:border-amber-200"
                       )}
                     >
-                      <p className={cn("text-sm font-black leading-tight", overviewTab === 'past' ? "text-yellow-400" : "text-amber-950")}>
+                      <p className={cn("text-sm font-black leading-tight", overviewTab === 'past' ? "text-amber-950" : "text-amber-950 font-black")}>
                         {appointments.filter(a => {
                           const isSelectedToday = isSameDay(selectedDate, new Date());
                           const currentTimeStr = format(now, 'HH:mm');
                           return a.status === 'active' && isSelectedToday && (a.endTime || '23:59') <= currentTimeStr;
                         }).length} phiên
                       </p>
-                      <p className={cn("text-[10px] uppercase font-bold tracking-widest", overviewTab === 'past' ? "text-amber-200" : "text-yellow-700")}>Đã kết thúc</p>
+                      <p className={cn("text-[10px] uppercase font-bold tracking-widest", overviewTab === 'past' ? "text-amber-800" : "text-yellow-700")}>Đã kết thúc</p>
                     </button>
 
                     <button 
@@ -691,18 +698,18 @@ export default function App() {
                       className={cn(
                         "text-left px-6 py-3 rounded-2xl border transition-all active:scale-95",
                         overviewTab === 'active' 
-                          ? "bg-amber-950 text-white border-amber-950 shadow-lg" 
+                          ? "bg-yellow-400 text-amber-950 border-yellow-400 shadow-lg" 
                           : "bg-slate-50 text-slate-600 border-slate-100 hover:border-amber-200"
                       )}
                     >
-                      <p className={cn("text-sm font-black leading-tight", overviewTab === 'active' ? "text-yellow-400" : "text-amber-950")}>
+                      <p className={cn("text-sm font-black leading-tight", overviewTab === 'active' ? "text-amber-950" : "text-amber-950 font-black")}>
                         {(() => {
                            const isSelectedToday = isSameDay(selectedDate, new Date());
                            const currentTimeStr = format(now, 'HH:mm');
                            return appointments.filter(a => a.status === 'active' && (!isSelectedToday || (a.endTime || '23:59') > currentTimeStr)).length;
                         })()} phiên
                       </p>
-                      <p className={cn("text-[10px] uppercase font-bold tracking-widest", overviewTab === 'active' ? "text-amber-200" : "text-yellow-700")}>Đã đặt chỗ</p>
+                      <p className={cn("text-[10px] uppercase font-bold tracking-widest", overviewTab === 'active' ? "text-amber-800" : "text-yellow-700")}>Xem lịch đã đặt</p>
                     </button>
 
                     <button 
@@ -753,33 +760,48 @@ export default function App() {
                             </div>
                           );
 
-                          return pastApps.sort((a,b) => a.startTime.localeCompare(b.startTime)).map((app) => (
-                            <div key={app.id} className="p-4 rounded-2xl border bg-slate-50 border-slate-100 opacity-40 grayscale transition-all flex items-start justify-between gap-4">
-                              <div className="flex items-start gap-4 overflow-hidden w-full">
-                                <div className="px-3 py-2 rounded-xl bg-slate-200 text-slate-500 font-mono text-sm font-black shrink-0">
-                                  {app.startTime}
-                                </div>
-                                <div className="overflow-hidden flex-1">
-                                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">Đã kết thúc</p>
-                                  <h5 className="font-bold truncate leading-tight text-slate-500 line-through">{app.clientName}</h5>
-                                </div>
-                              </div>
+                          return (
+                            <div className="col-span-full space-y-10">
+                              {businessHours.map((range, bIdx) => {
+                                const rangeApps = pastApps.filter(a => {
+                                  const hour = parseInt(a.startTime.split(':')[0]);
+                                  return (hour >= range.start && hour < range.end) || (range.label === 'Chiều' && hour === range.end);
+                                }).sort((a,b) => a.startTime.localeCompare(b.startTime));
+
+                                if (rangeApps.length === 0) return null;
+
+                                return (
+                                  <div key={bIdx} className="space-y-6">
+                                    <div className="flex items-center gap-4">
+                                      <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">
+                                        BUỔI {range.label.toUpperCase()}
+                                      </h3>
+                                      <div className="h-px flex-1 bg-slate-100" />
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                      {rangeApps.map((app) => (
+                                        <div key={app.id} className="p-4 rounded-2xl border bg-slate-50 border-slate-100 opacity-40 grayscale flex items-start justify-between gap-4">
+                                          <div className="flex items-start gap-4 overflow-hidden w-full">
+                                            <div className="px-3 py-2 rounded-xl bg-slate-200 text-slate-500 font-mono text-sm font-black shrink-0">
+                                              {app.startTime}
+                                            </div>
+                                            <div className="overflow-hidden flex-1">
+                                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">Đã kết thúc</p>
+                                              <h5 className="font-bold truncate leading-tight text-slate-500 line-through">{app.clientName}</h5>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ));
+                          );
                         }
 
                         if (overviewTab === 'active') {
-                          const displayList = [...activeApps, ...cancelledApps].sort((a,b) => {
-                            const getPriority = (app: any) => {
-                              const isOngoing = isSelectedToday && currentTimeStr >= app.startTime && currentTimeStr < (app.endTime || '23:59');
-                              return isOngoing ? 0 : 1;
-                            };
-                            const pA = getPriority(a);
-                            const pB = getPriority(b);
-                            if (pA !== pB) return pA - pB;
-                            return a.startTime.localeCompare(b.startTime);
-                          });
-
+                          const displayList = [...activeApps, ...cancelledApps];
                           if (displayList.length === 0) return (
                             <div className="col-span-full py-12 border-2 border-dashed border-slate-100 rounded-3xl flex flex-col items-center justify-center text-center bg-slate-50/20">
                               <CalendarDays size={24} className="text-slate-200 mb-3" />
@@ -787,55 +809,89 @@ export default function App() {
                             </div>
                           );
 
-                          return displayList.map((app) => {
-                            const isInProgress = isSelectedToday && currentTimeStr >= app.startTime && currentTimeStr < (app.endTime || '23:59');
-                            return (
-                              <div key={app.id} className={cn(
-                                "p-4 rounded-2xl border transition-all flex items-start justify-between gap-4 group relative",
-                                app.status === 'cancelled' 
-                                  ? "bg-red-50/50 border-red-100 opacity-80" 
-                                  : isInProgress
-                                    ? "bg-yellow-50 border-yellow-400 shadow-lg shadow-yellow-100 ring-2 ring-yellow-200"
-                                    : "bg-slate-50/50 border-white shadow-sm hover:border-yellow-300 hover:bg-yellow-50"
-                              )}>
-                                <div className="flex items-start gap-4 overflow-hidden w-full">
-                                  <div className={cn(
-                                    "px-3 py-2 rounded-xl font-mono text-sm font-black shadow-lg shrink-0 text-center",
-                                    app.status === 'cancelled' 
-                                      ? "bg-red-400 text-white shadow-red-100" 
-                                      : isInProgress
-                                        ? "bg-yellow-400 text-amber-950 shadow-yellow-200 animate-pulse"
-                                        : "bg-yellow-400 text-amber-950 shadow-yellow-200"
-                                  )}>
-                                    {app.startTime}
-                                  </div>
-                                  <div className="overflow-hidden flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">
-                                        {isInProgress ? 'Đang diễn ra' : 'Học viên'}
-                                      </p>
-                                      {app.status === 'cancelled' && (
-                                        <span className="text-[8px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Đã hủy</span>
-                                      )}
+                          return (
+                            <div className="col-span-full space-y-10">
+                              {businessHours.map((range, bIdx) => {
+                                const rangeApps = displayList.filter(a => {
+                                  const hour = parseInt(a.startTime.split(':')[0]);
+                                  return (hour >= range.start && hour < range.end) || (range.label === 'Chiều' && hour === range.end);
+                                }).sort((a,b) => {
+                                  const getPriority = (app: any) => {
+                                    const isOngoing = isSelectedToday && currentTimeStr >= app.startTime && currentTimeStr < (app.endTime || '23:59');
+                                    return isOngoing ? 0 : 1;
+                                  };
+                                  const pA = getPriority(a);
+                                  const pB = getPriority(b);
+                                  if (pA !== pB) return pA - pB;
+                                  return a.startTime.localeCompare(b.startTime);
+                                });
+
+                                if (rangeApps.length === 0) return null;
+
+                                return (
+                                  <div key={bIdx} className="space-y-6">
+                                    <div className="flex items-center gap-4">
+                                      <h3 className="text-[11px] font-black text-yellow-600 uppercase tracking-[0.2em] whitespace-nowrap">
+                                        BUỔI {range.label.toUpperCase()}
+                                      </h3>
+                                      <div className="h-px flex-1 bg-yellow-100/50" />
                                     </div>
-                                    <h5 className={cn("font-bold truncate leading-tight", app.status === 'cancelled' ? "text-slate-500 line-through" : "text-slate-900")}>
-                                      {app.clientName}
-                                    </h5>
-                                    <p className={cn("text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 mt-1", isInProgress ? "text-yellow-700" : "text-yellow-600")}>
-                                      {app.guide}
-                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                      {rangeApps.map((app) => {
+                                        const isInProgress = isSelectedToday && currentTimeStr >= app.startTime && currentTimeStr < (app.endTime || '23:59');
+                                        return (
+                                          <div key={app.id} className={cn(
+                                            "p-4 rounded-3xl border transition-all flex items-start justify-between gap-4 group relative",
+                                            app.status === 'cancelled' 
+                                              ? "bg-red-50/50 border-red-100 opacity-80" 
+                                              : isInProgress
+                                                ? "bg-yellow-50 border-yellow-400 shadow-lg shadow-yellow-100 ring-2 ring-yellow-200"
+                                                : "bg-white border-slate-100 shadow-sm hover:border-yellow-300 hover:bg-yellow-50/30"
+                                          )}>
+                                            <div className="flex items-start gap-4 overflow-hidden w-full">
+                                              <div className={cn(
+                                                "px-3 py-2 rounded-2xl font-mono text-sm font-black shadow-lg shrink-0 text-center",
+                                                app.status === 'cancelled' 
+                                                  ? "bg-red-400 text-white shadow-red-100" 
+                                                  : isInProgress
+                                                    ? "bg-amber-950 text-yellow-400 shadow-amber-900/20 animate-pulse"
+                                                    : "bg-yellow-400 text-amber-950 shadow-yellow-200/50"
+                                              )}>
+                                                {app.startTime}
+                                              </div>
+                                              <div className="overflow-hidden flex-1">
+                                                <div className="flex items-center gap-2">
+                                                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">
+                                                    {isInProgress ? 'Đang diễn ra' : 'Học viên'}
+                                                  </p>
+                                                  {app.status === 'cancelled' && (
+                                                    <span className="text-[8px] font-black text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Đã hủy</span>
+                                                  )}
+                                                </div>
+                                                <h5 className={cn("font-bold truncate leading-tight", app.status === 'cancelled' ? "text-slate-500 line-through" : "text-slate-900")}>
+                                                  {app.clientName}
+                                                </h5>
+                                                <p className={cn("text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 mt-1", isInProgress ? "text-yellow-700" : "text-yellow-600")}>
+                                                  {app.guide}
+                                                </p>
+                                              </div>
+                                            </div>
+                                            {app.status !== 'cancelled' && (
+                                              <button onClick={() => { setManageAppointment(app); setShowManageModal(true); }}
+                                                className="flex flex-col items-center gap-1 p-2 text-slate-300 hover:text-red-500 transition-all shrink-0 hover:bg-red-50 rounded-xl">
+                                                <Trash2 size={16} />
+                                                <span className="text-[8px] font-black uppercase tracking-tighter">Hủy</span>
+                                              </button>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                                {app.status !== 'cancelled' && (
-                                  <button onClick={() => { setManageAppointment(app); setShowManageModal(true); }}
-                                    className="flex flex-col items-center gap-1 p-2 text-slate-300 hover:text-red-500 transition-all shrink-0 hover:bg-red-50 rounded-xl">
-                                    <Trash2 size={16} />
-                                    <span className="text-[8px] font-black uppercase tracking-tighter">Hủy</span>
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          });
+                                );
+                              })}
+                            </div>
+                          );
                         }
 
                         if (overviewTab === 'empty') {
@@ -851,28 +907,45 @@ export default function App() {
                             </div>
                           );
 
-                          return freeSlots.map((slot) => (
-                            <button
-                              key={slot}
-                              onClick={() => {
-                                setSelectedSlot(slot);
-                                setFormData({ name: '', guide: '', question: '', password: '' });
-                                setShowBookingModal(true);
-                              }}
-                              className="p-4 rounded-2xl border-2 border-dashed border-slate-100 bg-white hover:border-yellow-300 hover:bg-yellow-50/50 transition-all flex items-start justify-between group text-left"
-                            >
-                              <div className="flex items-start gap-4 overflow-hidden w-full">
-                                <div className="px-3 py-2 rounded-xl bg-slate-50 text-slate-300 font-mono text-sm font-black shrink-0 group-hover:bg-yellow-400 group-hover:text-amber-950 transition-colors">
-                                  {slot}
-                                </div>
-                                <div className="overflow-hidden">
-                                  <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-1 group-hover:text-yellow-600 transition-colors">Còn trống</p>
-                                  <h5 className="font-bold text-slate-300 group-hover:text-slate-600 transition-colors">Đặt lịch ngay</h5>
-                                </div>
-                              </div>
-                              <Plus size={16} className="text-slate-200 mt-1 group-hover:text-yellow-600 transition-all group-hover:rotate-90" />
-                            </button>
-                          ));
+                          return (
+                            <div className="col-span-full space-y-10">
+                              {businessHours.map((range, bIdx) => {
+                                const rangeSlots = freeSlots.filter(s => {
+                                  const hour = parseInt(s.split(':')[0]);
+                                  return (hour >= range.start && hour < range.end) || (range.label === 'Chiều' && hour === range.end);
+                                });
+
+                                if (rangeSlots.length === 0) return null;
+
+                                return (
+                                  <div key={bIdx} className="space-y-6">
+                                    <div className="flex items-center gap-4">
+                                      <h3 className="text-[11px] font-black text-yellow-600 uppercase tracking-[0.2em] whitespace-nowrap">
+                                        BUỔI {range.label.toUpperCase()}
+                                      </h3>
+                                      <div className="h-px flex-1 bg-yellow-100/50" />
+                                    </div>
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                                      {rangeSlots.map((slot) => (
+                                        <button
+                                          key={slot}
+                                          onClick={() => {
+                                            setSelectedSlot(slot);
+                                            setFormData({ name: '', guide: '', question: '', password: '' });
+                                            setShowBookingModal(true);
+                                          }}
+                                          className="px-4 py-4 rounded-3xl border border-slate-200 bg-white text-slate-900 font-mono text-sm font-black transition-all hover:bg-yellow-400 hover:border-yellow-400 hover:text-amber-950 hover:shadow-xl hover:shadow-yellow-100 active:scale-95 group relative flex items-center justify-center"
+                                        >
+                                          {slot}
+                                          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border-2 border-white opacity-0 group-hover:opacity-100 transition-all scale-0 group-hover:scale-100" />
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
                         }
                       })()}
                     </motion.div>
@@ -926,30 +999,30 @@ export default function App() {
                     <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-yellow-300 transition-colors group">
                       <div className="absolute -top-3 -left-3 w-8 h-8 bg-white border-2 border-yellow-400 rounded-full flex items-center justify-center text-sm font-black text-yellow-600 shadow-sm">1</div>
                       <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 mb-4 shadow-sm group-hover:text-yellow-500 transition-colors">
-                        <CalendarDays size={20} />
+                        <CalendarIcon size={20} />
                       </div>
                       <h4 className="font-black text-slate-900 text-sm mb-2 uppercase tracking-tight">Chọn ngày</h4>
-                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Sử dụng lịch bên dưới để chọn ngày bạn muốn kết nối.</p>
+                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Sử dụng nút mũi tên hoặc biểu tượng lịch ở trên để chọn ngày muốn đặt.</p>
                     </div>
 
                     {/* Step 2 */}
                     <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-yellow-300 transition-colors group">
                       <div className="absolute -top-3 -left-3 w-8 h-8 bg-white border-2 border-yellow-400 rounded-full flex items-center justify-center text-sm font-black text-yellow-600 shadow-sm">2</div>
-                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 mb-4 shadow-sm group-hover:text-yellow-500 transition-colors">
-                        <Clock size={20} />
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 mb-4 shadow-sm group-hover:text-yellow-500 transition-colors font-black uppercase text-[10px]">
+                        Slot
                       </div>
-                      <h4 className="font-black text-slate-900 text-sm mb-2 uppercase tracking-tight">Chọn giờ</h4>
-                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Chọn các ô khung giờ còn trống (màu trắng) phù hợp với bạn.</p>
+                      <h4 className="font-black text-slate-900 text-sm mb-2 uppercase tracking-tight">Tìm khung giờ</h4>
+                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Nhấn nút "ĐẶT LỊCH" để xem các khung giờ "Còn trống" (màu vàng nhạt).</p>
                     </div>
 
                     {/* Step 3 */}
                     <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-yellow-300 transition-colors group">
                       <div className="absolute -top-3 -left-3 w-8 h-8 bg-white border-2 border-yellow-400 rounded-full flex items-center justify-center text-sm font-black text-yellow-600 shadow-sm">3</div>
-                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 mb-4 shadow-sm group-hover:text-yellow-500 transition-colors font-black uppercase text-[10px]">
-                        PIN
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-400 mb-4 shadow-sm group-hover:text-yellow-500 transition-colors">
+                        <CheckCircle2 size={20} />
                       </div>
-                      <h4 className="font-black text-slate-900 text-sm mb-2 uppercase tracking-tight">Nhập PIN</h4>
-                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Điền thông tin & Mã PIN để bảo mật & quản lý lịch sau này.</p>
+                      <h4 className="font-black text-slate-900 text-sm mb-2 uppercase tracking-tight">Xác nhận</h4>
+                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">Chọn giờ, điền thông tin & Mã PIN để hoàn tất quá trình kết nối.</p>
                     </div>
 
                     {/* Desktop Connector Arrows */}
@@ -962,265 +1035,6 @@ export default function App() {
                   </div>
                 </div>
               </section>
-
-              <div className="flex flex-col lg:flex-row gap-8">
-                {/* Left Column: Selection Panel */}
-                <div id="selection-panel" className="w-full lg:w-[450px] bg-white rounded-[40px] p-8 lg:p-10 space-y-12 border border-yellow-200 shadow-xl shadow-yellow-100/50">
-                <section className="space-y-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Hôm nay là</span>
-                  <h2 className="text-5xl lg:text-7xl font-serif font-black text-slate-900 leading-none">
-                    {format(selectedDate, 'dd')}
-                  </h2>
-                  <p className="text-xl font-medium text-slate-500 capitalize">
-                    {format(selectedDate, 'eeee, MMMM yyyy', { locale: vi })}
-                  </p>
-                </section>
-
-                <section>
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Chọn ngày</h3>
-                    <div className="flex gap-1">
-                      <button onClick={() => setSelectedDate(addDays(selectedDate, -7))} className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-400">
-                        <ChevronLeft size={16} />
-                      </button>
-                      <button onClick={() => setSelectedDate(addDays(selectedDate, 7))} className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-400">
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-7 gap-1 mb-2">
-                    {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((d, i) => (
-                      <div key={i} className="text-[10px] font-bold text-slate-300 text-center uppercase py-1">{d}</div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {eachDayOfInterval({
-                      start: startOfWeek(selectedDate, { weekStartsOn: 1 }),
-                      end: addDays(startOfWeek(selectedDate, { weekStartsOn: 1 }), 13)
-                    }).map((day, i) => {
-                      const lastHour = businessHours[businessHours.length - 1].end;
-                      const isPastDay = (isPast(day) && !isToday(day)) || (isToday(day) && parse(format(new Date(), 'HH:mm'), 'HH:mm', new Date()) > parse(`${lastHour}:00`, 'HH:mm', new Date()));
-                      const isSelected = isSameDay(day, selectedDate);
-                      return (
-                        <button
-                          key={i}
-                          disabled={isPastDay}
-                          onClick={() => {
-                            setSelectedDate(day);
-                            setSelectedSlot(null);
-                          }}
-                          className={cn(
-                            "h-10 w-full rounded-xl flex items-center justify-center text-sm transition-all duration-200 font-bold",
-                            isSelected 
-                              ? "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-200 scale-110 z-10" 
-                              : "text-slate-600 hover:bg-yellow-50 hover:text-yellow-700",
-                            isPastDay && "opacity-20 cursor-not-allowed"
-                          )}
-                        >
-                          {format(day, 'd')}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                <section className="space-y-8">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Chọn giờ hẹn</h3>
-                  
-                  {businessHours.map((range, idx) => {
-                    const rangeSlots = slots.filter(s => {
-                      const hour = parseInt(s.split(':')[0]);
-                      return hour >= range.start && hour < range.end;
-                    });
-
-                    if (rangeSlots.length === 0) return null;
-
-                    return (
-                      <div key={idx} className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-bold text-yellow-600 uppercase tracking-widest leading-none">Buổi {range.label}</span>
-                          <div className="h-px flex-1 bg-yellow-100" />
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          {rangeSlots.map((slot) => {
-                            const activeApp = appointments.find(a => a.startTime === slot && a.status === 'active');
-                            const adminCancelledApp = appointments.find(a => a.startTime === slot && a.status === 'cancelled' && a.cancelledByAdmin);
-                            const isLocked = lockedSlots.find(l => l.startTime === slot);
-                            const isSelected = selectedSlot === slot;
-                            const isSlotPast = isToday(selectedDate) && parse(format(new Date(), 'HH:mm'), 'HH:mm', new Date()) > parse(slot, 'HH:mm', new Date());
-                            
-                            const activeDuration = currentDayConfig?.duration || slotDuration;
-
-                            return (
-                              <div key={slot} className="relative group">
-                                <button
-                                  disabled={(!!isLocked || isSlotPast || !!adminCancelledApp) && !activeApp}
-                                  onClick={() => {
-                                    if (activeApp) {
-                                      setManageAppointment(activeApp);
-                                      setShowManageModal(true);
-                                    } else if (adminCancelledApp) {
-                                      // Admin can see the reason even if it's dimmed
-                                      if (isAdmin) {
-                                        setManageAppointment(adminCancelledApp);
-                                        setShowManageModal(true);
-                                      }
-                                    } else {
-                                      setSelectedSlot(slot);
-                                    }
-                                  }}
-                                  className={cn(
-                                    "w-full px-2 py-3 rounded-xl border text-[13px] font-black font-mono transition-all duration-200 text-center relative",
-                                    (isLocked || isSlotPast || (adminCancelledApp && !isAdmin)) && !activeApp
-                                      ? "bg-slate-50 border-slate-100 text-slate-200 cursor-not-allowed" 
-                                      : adminCancelledApp && isAdmin
-                                        ? "bg-red-50 border-red-200 text-red-300"
-                                        : activeApp
-                                          ? "bg-yellow-400 border-yellow-400 text-amber-950 shadow-md shadow-yellow-100/50"
-                                          : isSelected
-                                            ? "bg-white border-yellow-400 ring-2 ring-yellow-400 shadow-xl shadow-yellow-100"
-                                            : "bg-white border-slate-200 text-slate-600 hover:border-yellow-400 hover:bg-yellow-50"
-                                  )}
-                                >
-                                  {slot}
-                                  {activeApp && <span className="absolute -top-1 -right-1 flex h-2 w-2 rounded-full bg-red-500 animate-pulse" />}
-                                  {adminCancelledApp && (
-                                    <span className="block text-[7px] font-black text-red-300 uppercase mt-0.5 tracking-tighter">Bận đột xuất</span>
-                                  )}
-                                  {isLocked && !activeApp && !adminCancelledApp && (
-                                    <span className="block text-[8px] font-bold text-slate-400 uppercase mt-1">Locked</span>
-                                  )}
-                                </button>
-                                
-                                {isAdmin && !activeApp && !adminCancelledApp && (
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleLockSlot(slot);
-                                    }}
-                                    className="absolute -top-2 -left-2 opacity-0 group-hover:opacity-100 p-1.5 bg-yellow-400 text-amber-950 rounded-full shadow-lg transition-all hover:scale-110 z-10"
-                                    title={isLocked ? "Mở khóa" : "Khóa slot này"}
-                                  >
-                                     {isLocked ? <ChevronRight size={10} className="rotate-90" /> : <Lock size={10} />}
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </section>
-              </div>
-
-                {/* Right Column: Form Panel */}
-                <div className="flex-1 space-y-16">
-                  <AnimatePresence mode="wait">
-                    {selectedSlot ? (
-                      <motion.section
-                        key="form"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="space-y-8"
-                      >
-                         <div className="flex items-center gap-4">
-                           <div className="h-px flex-1 bg-yellow-200" />
-                           <h3 className="text-xs font-bold text-yellow-600 uppercase tracking-[0.2em] whitespace-nowrap">Đang đặt chỗ cho lúc {selectedSlot}</h3>
-                           <div className="h-px flex-1 bg-yellow-200" />
-                         </div>
-
-                         <div className="bg-white rounded-[40px] p-10 lg:p-14 border border-yellow-200 shadow-2xl shadow-yellow-100/50">
-                           <form onSubmit={handleBooking} className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-                             <div className="space-y-2">
-                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Tên Học viên</label>
-                               <input 
-                                 required
-                                 type="text" 
-                                 value={formData.name}
-                                 onChange={e => setFormData({...formData, name: e.target.value})}
-                                 placeholder="Nhập tên..."
-                                 className="w-full px-6 py-4 bg-yellow-50/30 border border-transparent rounded-2xl focus:ring-2 focus:ring-yellow-400 focus:bg-white transition-all outline-none text-base font-bold placeholder:text-slate-300"
-                               />
-                             </div>
-
-                             <div className="space-y-2">
-                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Hướng dẫn viên</label>
-                               <input 
-                                 required
-                                 type="text" 
-                                 value={formData.guide}
-                                 onChange={e => setFormData({...formData, guide: e.target.value})}
-                                 placeholder="Ví dụ: Sư Huynh"
-                                 className="w-full px-6 py-4 bg-yellow-50/30 border border-transparent rounded-2xl focus:ring-2 focus:ring-yellow-400 focus:bg-white transition-all outline-none text-base font-bold placeholder:text-slate-300"
-                               />
-                             </div>
-
-                             <div className="md:col-span-2 space-y-2">
-                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] ml-1">Vấn đề cần hỗ trợ</label>
-                               <textarea 
-                                 required
-                                 rows={4}
-                                 value={formData.question}
-                                 onChange={e => setFormData({...formData, question: e.target.value})}
-                                 placeholder="Bạn muốn trao đổi về điều gì?"
-                                 className="w-full px-6 py-4 bg-yellow-50/30 border border-transparent rounded-2xl focus:ring-2 focus:ring-yellow-400 focus:bg-white transition-all outline-none text-base font-bold placeholder:text-slate-300 resize-none"
-                               />
-                             </div>
-
-                             <div className="md:col-span-2 space-y-2">
-                               <div className="flex items-center justify-between ml-1">
-                                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Mật khẩu hủy lịch</label>
-                                 <span className="text-[9px] text-yellow-600 font-bold uppercase tracking-widest">(Ghi nhớ để tự hủy khi cần)</span>
-                               </div>
-                               <input 
-                                 required
-                                 type="text" 
-                                 value={formData.password}
-                                 onChange={e => setFormData({...formData, password: e.target.value})}
-                                 placeholder="Nhập 4 số..."
-                                 className="w-full px-6 py-4 bg-yellow-50/30 border border-transparent rounded-2xl focus:ring-2 focus:ring-yellow-400 focus:bg-white transition-all outline-none text-base font-bold tracking-widest placeholder:tracking-normal placeholder:text-slate-300"
-                               />
-                             </div>
-
-                             <div className="md:col-span-2 pt-6">
-                               <button 
-                                 disabled={isBooking}
-                                 className="w-full py-5 bg-yellow-400 text-amber-950 rounded-2xl text-lg font-black shadow-xl shadow-yellow-200 hover:bg-yellow-300 transition-all transform active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-3"
-                               >
-                                 {isBooking ? (
-                                   <>
-                                     <div className="w-5 h-5 border-3 border-amber-950/20 border-t-amber-950 rounded-full animate-spin" />
-                                     ĐANG XỬ LÝ...
-                                   </>
-                                 ) : (
-                                   'XÁC NHẬN ĐẶT LỊCH NGAY'
-                                 )}
-                               </button>
-                             </div>
-                           </form>
-                         </div>
-                      </motion.section>
-                    ) : (
-                      <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="py-32 px-8 border-2 border-dashed border-yellow-200 rounded-[40px] flex flex-col items-center justify-center text-center bg-white/40"
-                      >
-                         <div className="w-20 h-20 rounded-full bg-white shadow-xl flex items-center justify-center text-yellow-300 mb-8 animate-bounce">
-                           <Clock size={32} />
-                         </div>
-                         <h4 className="text-2xl font-bold text-slate-900 tracking-tight mb-2">Sẵn sàng để đặt lịch?</h4>
-                         <p className="text-slate-400 font-medium max-w-xs mx-auto">
-                           Vui lòng chọn một khung giờ trống ở bên trái để bắt đầu quá trình đặt lịch.
-                         </p>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
             </motion.div>
           ) : (
             <motion.div 
@@ -1974,6 +1788,100 @@ export default function App() {
               </form>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Date Picker Modal */}
+      <AnimatePresence>
+        {showCalendarPicker && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-[40px] p-10 max-w-md w-full shadow-2xl border border-yellow-200"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xl font-black text-slate-900 uppercase">Chọn ngày kết nối</h3>
+                <button onClick={() => setShowCalendarPicker(false)} className="p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-50 rounded-xl">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex items-center justify-between bg-slate-50 p-4 rounded-3xl">
+                  <button onClick={() => setCurrentMonth(addMonths(currentMonth, -1))} className="p-2 hover:bg-white rounded-xl text-slate-400 shadow-sm transition-all">
+                    <ChevronLeft size={20} />
+                  </button>
+                  <span className="font-black text-sm text-slate-700 uppercase tracking-widest">
+                    {format(currentMonth, 'MMMM yyyy', { locale: vi })}
+                  </span>
+                  <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 hover:bg-white rounded-xl text-slate-400 shadow-sm transition-all">
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-7 gap-2">
+                  {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(d => (
+                    <div key={d} className="text-center text-[10px] font-black text-slate-300 uppercase py-2">{d}</div>
+                  ))}
+                  {(() => {
+                    const start = startOfMonth(currentMonth);
+                    const end = endOfMonth(currentMonth);
+                    const days = eachDayOfInterval({ start, end });
+                    const firstDayIdx = (getDay(start) + 6) % 7;
+                    
+                    const blanks = Array(firstDayIdx).fill(null);
+                    return [...blanks, ...days].map((day, i) => {
+                      if (!day) return <div key={`blank-${i}`} />;
+                      
+                      const isSelected = isSameDay(day, selectedDate);
+                      const isTodayDate = isSameDay(day, new Date());
+                      const isPastDay = isPast(day) && !isTodayDate;
+
+                      return (
+                        <button
+                          key={i}
+                          disabled={isPastDay}
+                          onClick={() => {
+                            setSelectedDate(day);
+                            setShowCalendarPicker(false);
+                            setSelectedSlot(null);
+                          }}
+                          className={cn(
+                            "h-10 rounded-xl flex items-center justify-center text-xs font-bold transition-all relative overflow-hidden",
+                            isSelected 
+                              ? "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-100 z-10 scale-110" 
+                              : isPastDay
+                                ? "text-slate-200 cursor-not-allowed"
+                                : "text-slate-600 hover:bg-yellow-50 hover:text-yellow-700"
+                          )}
+                        >
+                          {format(day, 'd')}
+                          {isTodayDate && (
+                            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-yellow-600" />
+                          )}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              <div className="mt-10">
+                <button 
+                  onClick={() => {
+                    setSelectedDate(new Date());
+                    setShowCalendarPicker(false);
+                    setSelectedSlot(null);
+                  }}
+                  className="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-yellow-50 hover:text-yellow-700 transition-all"
+                >
+                  Quay về hôm nay
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
