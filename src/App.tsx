@@ -1019,7 +1019,7 @@ export default function App() {
                          </p>
                       </div>
                       <button 
-                        onClick={() => window.open('https://youtu.be/yzqZqit4TZ8', '_blank')}
+                        onClick={() => window.open('https://youtube.com/shorts/Hdg8yxv2BqM', '_blank')}
                         className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-red-100 hover:bg-red-700 transition-all flex items-center justify-center gap-3 active:scale-95"
                       >
                         <Play size={16} fill="currentColor" />
