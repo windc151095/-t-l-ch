@@ -10,6 +10,7 @@ import {
   startOfWeek, 
   eachDayOfInterval, 
   isSameDay, 
+  isBefore,
   addMinutes, 
   parse, 
   isPast, 
@@ -662,14 +663,27 @@ export default function App() {
               {/* Dashboard Overview - TOP */}
               <section className="bg-white rounded-[40px] p-8 lg:p-12 border border-yellow-200 shadow-xl shadow-yellow-100/50 relative">
                 {/* Floating Add Button for Overview */}
-                <button
-                  onClick={() => setOverviewTab('empty')}
-                  className="absolute -top-3 -right-3 px-5 py-2.5 bg-amber-950 text-yellow-400 rounded-[18px] flex flex-col items-center justify-center gap-0.5 shadow-2xl hover:scale-105 active:scale-95 transition-all z-10 border-4 border-white"
-                  title="Mở danh sách slot trống"
-                >
-                  <Plus size={14} strokeWidth={4} />
-                  <span className="text-[9px] font-black uppercase tracking-widest whitespace-nowrap">Đặt lịch</span>
-                </button>
+                {(() => {
+                  const today = startOfDay(new Date());
+                  const isPastDay = isBefore(selectedDate, today);
+                  return (
+                    <button
+                      onClick={() => {
+                        if (isPastDay) {
+                          setSelectedDate(today);
+                          // We also check if today is finished to maybe jump to tomorrow? 
+                          // But the user said "mặc định bắt đầu từ ngày hiện tại" (today).
+                        }
+                        setOverviewTab('empty');
+                      }}
+                      className="absolute -top-3 -right-3 px-5 py-2.5 bg-amber-950 text-yellow-400 rounded-[18px] flex flex-col items-center justify-center gap-0.5 shadow-2xl hover:scale-105 active:scale-95 transition-all z-10 border-4 border-white"
+                      title="Mở danh sách slot trống"
+                    >
+                      <Plus size={14} strokeWidth={4} />
+                      <span className="text-[9px] font-black uppercase tracking-widest whitespace-nowrap">Đặt lịch</span>
+                    </button>
+                  );
+                })()}
 
                 <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
                   <div className="space-y-2">
@@ -719,9 +733,11 @@ export default function App() {
                     >
                       <p className={cn("text-sm font-black leading-tight", overviewTab === 'past' ? "text-amber-950" : "text-amber-950 font-black")}>
                         {appointments.filter(a => {
+                          const today = startOfDay(new Date());
+                          const isPastDay = isBefore(selectedDate, today);
                           const isSelectedToday = isSameDay(selectedDate, new Date());
                           const currentTimeStr = format(now, 'HH:mm');
-                          return a.status === 'active' && isSelectedToday && (a.endTime || '23:59') <= currentTimeStr;
+                          return a.status === 'active' && (isPastDay || (isSelectedToday && (a.endTime || '23:59') <= currentTimeStr));
                         }).length} phiên
                       </p>
                       <p className={cn("text-[10px] uppercase font-bold tracking-widest", overviewTab === 'past' ? "text-amber-800" : "text-yellow-700")}>Đã kết thúc</p>
@@ -738,6 +754,9 @@ export default function App() {
                     >
                       <p className={cn("text-sm font-black leading-tight", overviewTab === 'active' ? "text-amber-950" : "text-amber-950 font-black")}>
                         {(() => {
+                           const today = startOfDay(new Date());
+                           const isPastDay = isBefore(selectedDate, today);
+                           if (isPastDay) return 0;
                            const isSelectedToday = isSameDay(selectedDate, new Date());
                            const currentTimeStr = format(now, 'HH:mm');
                            return appointments.filter(a => a.status === 'active' && (!isSelectedToday || (a.endTime || '23:59') > currentTimeStr)).length;
@@ -750,11 +769,14 @@ export default function App() {
                       onClick={() => setOverviewTab('empty')}
                       className={cn(
                         "text-left px-6 py-3 rounded-2xl border transition-all active:scale-95 group",
-                        overviewTab === 'empty' ? "bg-yellow-400 text-amber-950 border-yellow-400 shadow-lg" : "bg-white border-yellow-200"
+                        overviewTab === 'empty' ? "bg-yellow-400 text-amber-950 border-yellow-400 shadow-lg" : "bg-white border-yellow-200",
+                        isBefore(selectedDate, startOfDay(new Date())) && "opacity-50 cursor-not-allowed pointer-events-none"
                       )}
                     >
                       <p className="text-sm font-black leading-tight">
                         {(() => {
+                          const today = startOfDay(new Date());
+                          if (isBefore(selectedDate, today)) return 0;
                           const takenSlotStartTimes = new Set(appointments.filter(a => a.status !== 'cancelled').map(a => a.startTime));
                           const isSelectedToday = isSameDay(selectedDate, new Date());
                           const currentTimeStr = format(now, 'HH:mm');
@@ -780,12 +802,23 @@ export default function App() {
                       className="col-span-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
                     >
                       {(() => {
+                        const today = startOfDay(new Date());
+                        const isPastDay = isBefore(selectedDate, today);
                         const isSelectedToday = isSameDay(selectedDate, new Date());
                         const currentTimeStr = format(now, 'HH:mm');
                         
-                        const pastApps = appointments.filter(a => a.status === 'active' && isSelectedToday && (a.endTime || '23:59') <= currentTimeStr);
-                        const activeApps = appointments.filter(a => a.status === 'active' && (!isSelectedToday || (a.endTime || '23:59') > currentTimeStr));
-                        const cancelledApps = appointments.filter(a => (a.status === 'cancelled' && a.cancelledByAdmin) && (!isSelectedToday || (a.endTime || '23:59') > currentTimeStr));
+                        // All active appointments on a past day are considered past
+                        const pastApps = appointments.filter(a => 
+                          a.status === 'active' && (isPastDay || (isSelectedToday && (a.endTime || '23:59') <= currentTimeStr))
+                        );
+                        // Active apps only exist on today or future
+                        const activeApps = appointments.filter(a => 
+                          a.status === 'active' && !isPastDay && (!isSelectedToday || (a.endTime || '23:59') > currentTimeStr)
+                        );
+                        // Cancelled apps
+                        const cancelledApps = appointments.filter(a => 
+                          (a.status === 'cancelled' && a.cancelledByAdmin) && !isPastDay && (!isSelectedToday || (a.endTime || '23:59') > currentTimeStr)
+                        );
 
                         if (overviewTab === 'past') {
                           if (pastApps.length === 0) return (
@@ -820,8 +853,10 @@ export default function App() {
                                               {app.startTime}
                                             </div>
                                             <div className="overflow-hidden flex-1">
-                                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 whitespace-nowrap">Đã kết thúc</p>
-                                              <h5 className="font-bold truncate leading-tight text-slate-500 line-through">{app.clientName}</h5>
+                                              <h5 className="font-bold truncate leading-tight text-slate-500">{app.clientName}</h5>
+                                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                                                {app.guide}
+                                              </p>
                                             </div>
                                           </div>
                                         </div>
@@ -929,6 +964,13 @@ export default function App() {
                         }
 
                         if (overviewTab === 'empty') {
+                          const today = startOfDay(new Date());
+                          if (isBefore(selectedDate, today)) return (
+                            <div className="col-span-full py-12 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Không thể đặt lịch cho ngày đã qua</p>
+                            </div>
+                          );
+
                           const takenSlotStartTimes = new Set(appointments.filter(a => a.status !== 'cancelled').map(a => a.startTime));
                           const freeSlots = slots.filter(s => {
                             const isPastSlot = isSelectedToday && s <= currentTimeStr;
