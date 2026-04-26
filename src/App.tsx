@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   format, 
   addDays, 
@@ -129,6 +129,7 @@ export default function App() {
   const [now, setNow] = useState(new Date());
   const [overviewTab, setOverviewTab] = useState<'active' | 'past' | 'empty'>('active');
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const hasAutoSwitchedRef = useRef(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 10000); // update every 10 seconds for smoothness
@@ -382,7 +383,7 @@ export default function App() {
 
   // Auto-switch to tomorrow if today's schedule is finished
   useEffect(() => {
-    if (view !== 'booking') return;
+    if (view !== 'booking' || hasAutoSwitchedRef.current) return;
     
     const today = startOfDay(new Date());
     if (isSameDay(selectedDate, today)) {
@@ -402,13 +403,11 @@ export default function App() {
       });
 
       // If today is effectively "over" for connections (no upcoming apps and no available slots)
-      // We check if it's already mid-day or later to avoid jumping too early if data is still loading
       if (upcomingApps.length === 0 && availableSlots.length === 0) {
-        // Only switch if it's actually past some business hours or we have confirmation data is loaded
-        // To be safe, we check if slots list was at least generated (today had slots)
         const totalSlotsToday = slots.length;
         if (totalSlotsToday > 0) {
           setSelectedDate(addDays(today, 1));
+          hasAutoSwitchedRef.current = true;
         }
       }
     }
@@ -1904,6 +1903,7 @@ export default function App() {
                   {(() => {
                     const start = startOfMonth(currentMonth);
                     const end = endOfMonth(currentMonth);
+                    const today = startOfDay(new Date());
                     const days = eachDayOfInterval({ start, end });
                     const firstDayIdx = (getDay(start) + 6) % 7;
                     
@@ -1913,12 +1913,11 @@ export default function App() {
                       
                       const isSelected = isSameDay(day, selectedDate);
                       const isTodayDate = isSameDay(day, new Date());
-                      const isPastDay = isPast(day) && !isTodayDate;
+                      const isPastDay = isBefore(day, today);
 
                       return (
                         <button
                           key={i}
-                          disabled={isPastDay}
                           onClick={() => {
                             setSelectedDate(day);
                             setShowCalendarPicker(false);
@@ -1929,7 +1928,7 @@ export default function App() {
                             isSelected 
                               ? "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-100 z-10 scale-110" 
                               : isPastDay
-                                ? "text-slate-200 cursor-not-allowed"
+                                ? "text-slate-300 hover:bg-slate-50"
                                 : "text-slate-600 hover:bg-yellow-50 hover:text-yellow-700"
                           )}
                         >
