@@ -53,6 +53,26 @@
         "duration": { "type": "number" }
       },
       "required": ["date", "morningActive", "afternoonActive", "duration"]
+    },
+    "CV": {
+      "title": "CV Học Viên",
+      "description": "Curriculum Vitae information for students.",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "phone": { "type": "string" },
+        "age": { "type": "string" },
+        "address": { "type": "string" },
+        "job": { "type": "string" },
+        "target": { "type": "string" },
+        "guideName": { "type": "string", "description": "Tên hướng dẫn viên" },
+        "guidePhoneLast4": { "type": "string", "description": "4 số cuối SĐT của hướng dẫn viên" },
+        "password": { "type": "string", "description": "Security PIN for the CV." },
+        "status": { "type": "string", "enum": ["pending", "approved"] },
+        "paymentImageUrl": { "type": "string", "description": "Lưu ảnh minh chứng chuyển khoản (Base64 hoặc URL)." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fullName", "phone", "age", "guideName", "guidePhoneLast4", "password", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -71,6 +91,10 @@
     "/dayConfigs/{dateStr}": {
       "schema": "DayConfig",
       "description": "Day specific configurations."
+    },
+    "/cvs/{cvId}": {
+      "schema": "CV",
+      "description": "Student CV registrations."
     }
   }
 }

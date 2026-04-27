@@ -46,6 +46,19 @@ service cloud.firestore {
         && (request.method == 'create' ? data.createdAt == request.time : true);
     }
 
+    function isValidCV(data) {
+      return data.keys().hasAll(['fullName', 'phone', 'age', 'address', 'job', 'target', 'guideName', 'guidePhoneLast4', 'password', 'status', 'createdAt'])
+        && data.keys().size() <= 15
+        && data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 200
+        && data.phone is string && data.phone.size() > 0 && data.phone.size() <= 20
+        && data.age is string && data.age.size() > 0 && data.age.size() <= 10
+        && data.guideName is string && data.guideName.size() > 0 && data.guideName.size() <= 200
+        && data.guidePhoneLast4 is string && data.guidePhoneLast4.size() == 4
+        && data.password is string && data.password.size() >= 4 && data.password.size() <= 20
+        && (!data.keys().contains('paymentImageUrl') || (data.paymentImageUrl is string && data.paymentImageUrl.size() <= 1500000))
+        && (request.method == 'create' ? data.status == 'pending' && data.createdAt == request.time : true);
+    }
+
     function isEffectiveAdmin() {
       return isAdmin() || (incoming().get('adminAuth', '') == '123456');
     }
@@ -109,6 +122,16 @@ service cloud.firestore {
       );
       
       allow delete: if isAdmin() || (existing().get('adminAuth', '') == '123456');
+    }
+
+    // CVs Collection
+    match /cvs/{cvId} {
+      // Allow list and get for everyone so they can search by PIN or view as admin (demo mode)
+      allow read: if true;
+      
+      allow create: if isValidCV(incoming()) && isValidId(cvId);
+      allow update: if isAdmin() || (incoming().get('adminAuth', '') == '123456');
+      allow delete: if isAdmin() || true; // In demo mode, allow deletion for simplify
     }
   }
 }

@@ -42,7 +42,13 @@ import {
   Edit3,
   Calendar,
   Play,
-  X
+  X,
+  FileText,
+  Download,
+  Search,
+  Image as ImageIcon,
+  Upload,
+  Eye
 } from 'lucide-react';
 import { 
   collection, 
@@ -96,6 +102,22 @@ interface Appointment {
   cancelledByAdmin?: boolean;
 }
 
+interface CV {
+  id: string;
+  fullName: string;
+  phone: string;
+  age: string;
+  address: string;
+  job: string;
+  target: string;
+  guideName: string;
+  guidePhoneLast4: string;
+  password: string; // Protecting with PIN
+  status: 'pending' | 'approved';
+  paymentImageUrl?: string;
+  createdAt: any;
+}
+
 // --- Constants ---
 const SLOT_DURATION = 30; // minutes
 
@@ -125,7 +147,29 @@ export default function App() {
   const [isAdminMessageVisible, setIsAdminMessageVisible] = useState(true);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
-  const [activeAdminTab, setActiveAdminTab] = useState<'config' | 'appointments' | 'cancelled'>('appointments');
+  const [activeAdminTab, setActiveAdminTab] = useState<'config' | 'appointments' | 'cancelled' | 'cvs'>('appointments');
+  const [cvFilter, setCvFilter] = useState<'all' | 'pending' | 'approved'>('all');
+  const [selectedPaymentImage, setSelectedPaymentImage] = useState<string | null>(null);
+  const [cvs, setCvs] = useState<CV[]>([]);
+  const [showCVModal, setShowCVModal] = useState(false);
+  const [cvModalTab, setCvModalTab] = useState<'search' | 'create'>('create');
+  const [cvSearchPIN, setCvSearchPIN] = useState('');
+  const [foundCV, setFoundCV] = useState<CV | null>(null);
+  const [isSearchingCV, setIsSearchingCV] = useState(false);
+  const [isSubmittingCV, setIsSubmittingCV] = useState(false);
+  const [cvFormData, setCvFormData] = useState({
+    fullName: '',
+    phone: '',
+    age: '',
+    address: '',
+    job: '',
+    target: '',
+    guideName: '',
+    guidePhoneLast4: '',
+    password: '',
+    paymentImageUrl: ''
+  });
+  const [cvAutoFillText, setCvAutoFillText] = useState('');
   const [now, setNow] = useState(new Date());
   const [overviewTab, setOverviewTab] = useState<'active' | 'past' | 'empty'>('active');
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -240,7 +284,7 @@ export default function App() {
           ]);
         }
       }
-    });
+    }, (err) => handleFirestoreError(err, 'get', 'settings/global'));
     return () => unsubSettings();
   }, []);
 
@@ -254,14 +298,14 @@ export default function App() {
       const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
       // Store all for admin to see cancelled, but filter for view
       setAppointments(apps);
-    });
+    }, (err) => handleFirestoreError(err, 'list', 'appointments'));
 
     // Fetch Locked Slots
     const qLocked = query(collection(db, 'lockedSlots'), where('date', '==', dateStr));
     const unsubLocked = onSnapshot(qLocked, (snapshot) => {
       const locked = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       setLockedSlots(locked);
-    });
+    }, (err) => handleFirestoreError(err, 'list', 'lockedSlots'));
 
     // Fetch Day Config
     const unsubDayConfig = onSnapshot(doc(db, 'dayConfigs', dateStr), (snapshot) => {
@@ -278,7 +322,7 @@ export default function App() {
           businessHours: businessHours
         });
       }
-    });
+    }, (err) => handleFirestoreError(err, 'get', `dayConfigs/${dateStr}`));
 
     return () => {
       unsubApps();
@@ -301,9 +345,7 @@ export default function App() {
         configs[doc.id] = doc.data() as DayConfig;
       });
       setAllDayConfigs(configs);
-    }, (err) => {
-      console.error("All configs listen error:", err);
-    });
+    }, (err) => handleFirestoreError(err, 'list', 'dayConfigs'));
 
     return () => unsubAllConfigs();
   }, [isAdmin]);
@@ -325,11 +367,25 @@ export default function App() {
     const unsubRecent = onSnapshot(qRecent, (snapshot) => {
       const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
       setRecentCancelled(apps);
-    }, (err) => {
-      console.error("Recent cancellations error:", err);
-    });
+    }, (err) => handleFirestoreError(err, 'list', 'appointments'));
 
     return () => unsubRecent();
+  }, [isAdmin]);
+
+  // Fetch CVs (Admin sees all, User sees none directly)
+  useEffect(() => {
+    if (!isAdmin) {
+      setCvs([]);
+      return;
+    }
+
+    const qCVs = query(collection(db, 'cvs'), orderBy('createdAt', 'desc'));
+    const unsubCVs = onSnapshot(qCVs, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CV));
+      setCvs(docs);
+    }, (err) => handleFirestoreError(err, 'list', 'cvs'));
+
+    return () => unsubCVs();
   }, [isAdmin]);
 
   const formatTime = (h: number) => {
@@ -523,6 +579,194 @@ export default function App() {
     }
   };
 
+  const handleCVSearch = async () => {
+    if (!cvSearchPIN) return;
+    setIsSearchingCV(true);
+    setFoundCV(null);
+    try {
+      const q = query(collection(db, 'cvs'), where('password', '==', cvSearchPIN), limit(1));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        setFoundCV({ id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as CV);
+      } else {
+        alert("Không tìm thấy CV với mã PIN này.");
+      }
+    } catch (err) {
+      console.error("CV search error:", err);
+      handleFirestoreError(err, 'list', 'cvs');
+    } finally {
+      setIsSearchingCV(false);
+    }
+  };
+
+  const exportSingleCV = async (cv: CV) => {
+    const { utils, writeFile } = await import('xlsx');
+    const data = [
+      { 'Trường thông tin': 'Họ tên', 'Giá trị': cv.fullName },
+      { 'Trường thông tin': 'Điện thoại', 'Giá trị': cv.phone },
+      { 'Trường thông tin': 'Tuổi', 'Giá trị': cv.age },
+      { 'Trường thông tin': 'Địa chỉ', 'Giá trị': cv.address },
+      { 'Trường thông tin': 'Công việc', 'Giá trị': cv.job },
+      { 'Trường thông tin': 'Mong muốn', 'Giá trị': cv.target },
+      { 'Trường thông tin': 'Tên HDV', 'Giá trị': cv.guideName },
+      { 'Trường thông tin': 'SĐT HDV (4 số cuối)', 'Giá trị': cv.guidePhoneLast4 },
+      { 'Trường thông tin': 'Trạng thái', 'Giá trị': cv.status === 'approved' ? 'Đã phê duyệt' : 'Đang chờ duyệt' }
+    ];
+    const worksheet = utils.json_to_sheet(data);
+    const workbook = utils.book_new();
+    utils.book_append_sheet(workbook, worksheet, 'CV');
+    writeFile(workbook, `CV_${cv.fullName.replace(/\s+/g, '_')}.xlsx`);
+  };
+
+  const handleCVAutoFill = (text: string) => {
+    setCvAutoFillText(text);
+    if (!text) return;
+
+    const lines = text.split('\n');
+    const newFormData = { ...cvFormData };
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      
+      const getValue = (indicator: string, label: string) => {
+        if (trimmed.startsWith(indicator)) {
+          return trimmed.replace(indicator, '').replace(label, '').replace(':', '').trim();
+        }
+        if (trimmed.toLowerCase().startsWith(label.toLowerCase())) {
+          return trimmed.replace(label, '').replace(':', '').trim();
+        }
+        return null;
+      };
+
+      const fullName = getValue('1.', 'Họ tên');
+      if (fullName !== null) newFormData.fullName = fullName;
+
+      const phone = getValue('2.', 'Điện thoại');
+      if (phone !== null) newFormData.phone = phone;
+
+      const age = getValue('3.', 'Tuổi');
+      if (age !== null) newFormData.age = age;
+
+      const address = getValue('4.', 'Địa Chỉ');
+      if (address !== null) newFormData.address = address;
+
+      const job = getValue('5.', 'Công Việc');
+      if (job !== null) newFormData.job = job;
+
+      const target = getValue('6.', 'Mong muốn');
+      if (target !== null) newFormData.target = target;
+
+      const guideName = getValue('7.', 'Tên hướng dẫn viên');
+      if (guideName !== null) newFormData.guideName = guideName;
+
+      const guidePhoneLast4 = getValue('8.', '4 số cuối SĐT của HDV');
+      if (guidePhoneLast4 !== null) newFormData.guidePhoneLast4 = guidePhoneLast4;
+    });
+
+    setCvFormData(newFormData);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 1024 * 1024) {
+        alert("Kích thước ảnh quá lớn (Phải dưới 1MB). Vui lòng nén ảnh hoặc chụp màn hình thu nhỏ lại.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCvFormData(prev => ({ ...prev, paymentImageUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCVSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cvFormData.password.length < 4) {
+      alert("Mã PIN phải tối thiểu 4 ký tự.");
+      return;
+    }
+    if (!cvFormData.fullName || !cvFormData.phone || !cvFormData.age || !cvFormData.guideName || !cvFormData.guidePhoneLast4) {
+      alert("Vui lòng điền đầy đủ các trường bắt buộc (1, 2, 3, 7, 8).");
+      return;
+    }
+    if (cvFormData.guidePhoneLast4.length !== 4) {
+      alert("Trường số 8 phải là đúng 4 số cuối của SĐT.");
+      return;
+    }
+    setIsSubmittingCV(true);
+    try {
+      await addDoc(collection(db, 'cvs'), {
+        ...cvFormData,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      alert("Đã tạo CV thành công! Vui lòng chờ quản trị viên phê duyệt.");
+      setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', password: '', paymentImageUrl: '', guideName: '', guidePhoneLast4: '' });
+      setCvAutoFillText('');
+      setShowCVModal(false);
+    } catch (err) {
+      console.error("CV submit error:", err);
+      handleFirestoreError(err, 'create', 'cvs');
+    } finally {
+      setIsSubmittingCV(false);
+    }
+  };
+
+  const handleApproveCV = async (cvId: string, currentStatus: string) => {
+    if (!isAdmin) return;
+    const newStatus = currentStatus === 'approved' ? 'pending' : 'approved';
+    try {
+      await updateDoc(doc(db, 'cvs', cvId), { 
+        status: newStatus,
+        adminAuth: '123456'
+      });
+      if (newStatus === 'approved') {
+        alert("Phê duyệt hồ sơ thành công!");
+      }
+    } catch (err) {
+      console.error("Approve CV error:", err);
+      handleFirestoreError(err, 'update', `cvs/${cvId}`);
+    }
+  };
+
+  const handleDeleteCV = async (cvId: string) => {
+    if (!isAdmin || !confirm("Bạn có chắc chắn muốn xóa CV này?")) return;
+    try {
+      await deleteDoc(doc(db, 'cvs', cvId));
+    } catch (err) {
+      console.error("Delete CV error:", err);
+      handleFirestoreError(err, 'delete', `cvs/${cvId}`);
+    }
+  };
+
+  const exportCVsToExcel = async () => {
+    const { utils, writeFile } = await import('xlsx');
+    
+    // Sort CVs for export: Approved ones first, then by name
+    const exportData = cvs.map(cv => ({
+      'Họ tên': cv.fullName,
+      'Điện thoại': cv.phone,
+      'Tuổi': cv.age,
+      'Địa Chỉ': cv.address,
+      'Công Việc': cv.job,
+      'Mong muốn': cv.target,
+      'Tên HDV': cv.guideName,
+      'SĐT HDV (4 số cuối)': cv.guidePhoneLast4,
+      'Trạng thái': cv.status === 'approved' ? 'Đã phê duyệt' : 'Chờ phê duyệt',
+      'Ngày tạo': cv.createdAt ? format(cv.createdAt.toDate(), 'dd/MM/yyyy HH:mm') : ''
+    }));
+
+    const worksheet = utils.json_to_sheet(exportData);
+    const workbook = utils.book_new();
+    utils.book_append_sheet(workbook, worksheet, 'Danh sách CV');
+    
+    // Generate filename with current date
+    const filename = `Danh_Sach_CV_Hoc_Vien_${format(new Date(), 'dd_MM_yyyy')}.xlsx`;
+    writeFile(workbook, filename);
+  };
+
   const toggleLockSlot = async (slot: string) => {
     if (!isAdmin) return;
     const existingLock = lockedSlots.find(l => l.startTime === slot);
@@ -569,6 +813,14 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowCVModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-700 rounded-xl font-bold text-xs hover:bg-yellow-200 transition-all border border-yellow-200 mr-2"
+          >
+            <FileText size={16} />
+            <span>CV Học viên</span>
+          </button>
+
           {!isAdmin && (
             <div className="flex items-center gap-2 mr-2">
               <button 
@@ -1130,6 +1382,7 @@ export default function App() {
                     { id: 'appointments', label: 'Lịch hẹn', icon: <CalendarDays size={16} /> },
                     { id: 'config', label: 'Cấu hình lịch hẹn', icon: <Clock size={16} /> },
                     { id: 'cancelled', label: 'Hủy lịch', icon: <Trash2 size={16} /> },
+                    { id: 'cvs', label: 'Quản lý CV', icon: <FileText size={16} /> },
                   ].map(tab => (
                     <button
                       key={tab.id}
@@ -1568,11 +1821,467 @@ export default function App() {
                     </div>
                   </motion.div>
                 )}
+
+                {activeAdminTab === 'cvs' && (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-yellow-100 rounded-2xl flex items-center justify-center text-yellow-600 shadow-sm border border-yellow-200">
+                          <FileText size={24} />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-slate-900 tracking-tight">Quản lý CV Học viên</h3>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tổng: {cvs.length}</span>
+                            <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                            <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Chờ Duyệt: {cvs.filter(c => c.status === 'pending').length}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={exportCVsToExcel}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black hover:bg-green-700 transition-all shadow-lg uppercase tracking-widest shadow-green-100"
+                        >
+                          <Download size={16} />
+                          Xuất Excel
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-sm sticky top-[4.5rem] z-10">
+                      {[
+                        { id: 'all', label: 'Tất cả CV' },
+                        { id: 'pending', label: 'Chờ phê duyệt' },
+                        { id: 'approved', label: 'Đã phê duyệt' },
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setCvFilter(tab.id as any)}
+                          className={cn(
+                            "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                            cvFilter === tab.id 
+                              ? "bg-slate-900 text-white shadow-lg" 
+                              : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                          )}
+                        >
+                          {tab.label}
+                          {tab.id === 'pending' && cvs.filter(c => c.status === 'pending').length > 0 && (
+                            <span className="ml-2 bg-orange-500 text-white px-1.5 py-0.5 rounded-md text-[8px]">
+                              {cvs.filter(c => c.status === 'pending').length}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4">
+                      {cvs.filter(c => cvFilter === 'all' ? true : c.status === cvFilter).length === 0 ? (
+                        <div className="py-24 text-center bg-white rounded-[40px] border border-slate-100">
+                          <p className="text-slate-400 font-bold italic text-lg capitalize">
+                            {cvFilter === 'all' ? 'Chưa có CV nào được tạo' : 
+                             cvFilter === 'pending' ? 'Không có CV nào đang chờ duyệt' : 'Chưa có CV nào được phê duyệt'}
+                          </p>
+                        </div>
+                      ) : (
+                        cvs.filter(c => cvFilter === 'all' ? true : c.status === cvFilter).map((cv) => (
+                          <div key={cv.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden group">
+                            {/* Status strip */}
+                            <div className={cn(
+                              "absolute top-0 left-0 w-1.5 h-full transition-all group-hover:w-2",
+                              cv.status === 'approved' ? "bg-green-500" : "bg-orange-400 animate-pulse"
+                            )} />
+                            
+                             <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pl-2 text-left">
+                               <div>
+                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Họ tên & Tuổi</p>
+                                 <h4 className="font-bold text-slate-900 text-base">{cv.fullName}</h4>
+                                 <p className="text-xs text-slate-500 font-medium">{cv.age} tuổi</p>
+                               </div>
+                               <div>
+                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Điện thoại</p>
+                                 <p className="text-xs font-bold text-slate-700 select-all">{cv.phone}</p>
+                               </div>
+                               <div>
+                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
+                                 <p className="text-xs font-bold text-blue-600 truncate">{cv.guideName}</p>
+                                 <p className="text-[9px] font-medium text-slate-400 italic">SĐT: ...{cv.guidePhoneLast4}</p>
+                               </div>
+                               <div className="flex items-center gap-2">
+                                 {cv.paymentImageUrl && (
+                                   <div className="space-y-1">
+                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Ảnh CK</p>
+                                     <button 
+                                       onClick={() => setSelectedPaymentImage(cv.paymentImageUrl || null)}
+                                       className="p-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors border border-blue-200 flex items-center gap-2 shadow-sm"
+                                     >
+                                       <ImageIcon size={16} />
+                                       <span className="text-[10px] font-black uppercase">Xem ảnh</span>
+                                     </button>
+                                   </div>
+                                 )}
+                               </div>
+                             </div>
+                            
+                            <div className="flex items-center gap-3 shrink-0 pt-4 lg:pt-0 border-t lg:border-t-0 border-slate-50 mt-4 lg:mt-0">
+                               <div className="text-right mr-2 hidden sm:block">
+                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Trạng thái</p>
+                                 <p className={cn(
+                                   "text-[10px] font-black uppercase tracking-wider",
+                                   cv.status === 'approved' ? "text-green-600" : "text-orange-600"
+                                 )}>
+                                   {cv.status === 'approved' ? '✓ Đã duyệt' : '● Chờ duyệt'}
+                                 </p>
+                               </div>
+                               
+                               <button 
+                                onClick={() => handleApproveCV(cv.id, cv.status)}
+                                className={cn(
+                                  "px-6 py-2.5 rounded-2xl font-black text-[10px] transition-all uppercase tracking-widest flex items-center gap-2",
+                                  cv.status === 'approved' 
+                                    ? "bg-green-100 text-green-700 border border-green-200 hover:bg-green-200" 
+                                    : "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-100 hover:bg-yellow-300 active:scale-95"
+                                )}
+                               >
+                                {cv.status === 'approved' ? <CheckCircle2 size={14} /> : null}
+                                {cv.status === 'approved' ? 'Bỏ duyệt' : 'Phê duyệt'}
+                               </button>
+                               <button 
+                                onClick={() => handleDeleteCV(cv.id)}
+                                title="Xóa hồ sơ"
+                                className="p-2.5 text-slate-300 hover:text-white hover:bg-red-500 rounded-xl transition-all border border-slate-100 hover:border-red-500 shadow-sm"
+                               >
+                                <Trash2 size={18} />
+                               </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
+
+      {/* CV Modal for Students */}
+      <AnimatePresence>
+        {/* Payment Image Popup */}
+        {selectedPaymentImage && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              onClick={() => setSelectedPaymentImage(null)}
+              className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="relative w-full max-w-2xl bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                    <ImageIcon size={20} />
+                  </div>
+                  <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm">Minh chứng chuyển khoản</h3>
+                </div>
+                <button 
+                  onClick={() => setSelectedPaymentImage(null)}
+                  className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex-1 bg-slate-50 p-4 min-h-[300px] max-h-[70vh] overflow-y-auto">
+                <img 
+                  src={selectedPaymentImage} 
+                  alt="Payment Evidence" 
+                  className="w-full h-auto object-contain rounded-2xl shadow-sm"
+                />
+              </div>
+              <div className="p-6 bg-white border-t border-slate-100 flex justify-end">
+                <button 
+                  onClick={() => setSelectedPaymentImage(null)}
+                  className="px-8 py-3 bg-slate-900 text-white font-black text-[10px] rounded-2xl uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showCVModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-amber-950/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[40px] p-8 max-w-2xl w-full shadow-2xl border border-yellow-200 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 tracking-tight">CV Học Viên</h2>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Hồ sơ năng lực cá nhân</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowCVModal(false);
+                    setFoundCV(null);
+                    setCvSearchPIN('');
+                  }} 
+                  className="p-3 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-2xl transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex bg-slate-100 p-1 rounded-2xl mb-8">
+                {[
+                  { id: 'create', label: 'Tạo CV Mới', icon: <Plus size={16} /> },
+                  { id: 'search', label: 'Tìm Kiếm CV', icon: <Search size={16} /> },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setCvModalTab(tab.id as any);
+                      setFoundCV(null);
+                    }}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all",
+                      cvModalTab === tab.id 
+                        ? "bg-white text-slate-900 shadow-sm" 
+                        : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {cvModalTab === 'create' ? (
+                <form onSubmit={handleCVSubmit} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Dán thông tin từ văn bản (Hệ thống tự điền)</label>
+                    <textarea 
+                      placeholder="Coppy và dán nội dung CV tại đây..." 
+                      rows={4}
+                      value={cvAutoFillText}
+                      onChange={(e) => handleCVAutoFill(e.target.value)}
+                      className="w-full px-5 py-3.5 bg-yellow-50 border border-yellow-100 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-medium text-sm resize-none italic" 
+                    />
+                    <div className="bg-slate-50 p-3 rounded-xl text-[10px] text-slate-500 font-medium leading-relaxed">
+                      Hướng dẫn: Dán nội dung theo định dạng "Họ tên...", "Điện thoại..." để tự động điền các trường bên dưới.
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Họ tên học viên *</label>
+                      <input required type="text" placeholder="Nguyễn Văn A" 
+                        value={cvFormData.fullName} onChange={(e) => setCvFormData({ ...cvFormData, fullName: e.target.value })}
+                        className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Điện thoại *</label>
+                       <input required type="tel" placeholder="090..." 
+                        value={cvFormData.phone} onChange={(e) => setCvFormData({ ...cvFormData, phone: e.target.value })}
+                        className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tuổi *</label>
+                      <input required type="text" placeholder="25" 
+                        value={cvFormData.age} onChange={(e) => setCvFormData({ ...cvFormData, age: e.target.value })}
+                        className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Địa Chi</label>
+                      <input type="text" placeholder="Hà Nội..." 
+                        value={cvFormData.address} onChange={(e) => setCvFormData({ ...cvFormData, address: e.target.value })}
+                        className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Công Việc</label>
+                    <input type="text" placeholder="Nhân viên văn phòng..." 
+                      value={cvFormData.job} onChange={(e) => setCvFormData({ ...cvFormData, job: e.target.value })}
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mong muốn</label>
+                    <textarea placeholder="Bạn mong muốn điều gì sau khóa học?" rows={3}
+                      value={cvFormData.target} onChange={(e) => setCvFormData({ ...cvFormData, target: e.target.value })}
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm resize-none" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tên hướng dẫn viên *</label>
+                       <input required type="text" placeholder="Tên người hướng dẫn..." 
+                        value={cvFormData.guideName} onChange={(e) => setCvFormData({ ...cvFormData, guideName: e.target.value })}
+                        className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">4 số cuối SĐT của HDV *</label>
+                       <input required type="text" maxLength={4} placeholder="Ví dụ: 1234" 
+                        value={cvFormData.guidePhoneLast4} onChange={(e) => setCvFormData({ ...cvFormData, guidePhoneLast4: e.target.value })}
+                        className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN bảo mật CV (Để tìm kiếm sau này)</label>
+                    <input required type="password" placeholder="Tối thiểu 4 ký tự" 
+                      value={cvFormData.password} onChange={(e) => setCvFormData({ ...cvFormData, password: e.target.value })}
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest" />
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Ảnh chuyển khoản thành công *</label>
+                    <div 
+                      onClick={() => document.getElementById('payment-upload')?.click()}
+                      className={cn(
+                        "w-full aspect-video rounded-3xl border-2 border-dashed flex flex-col items-center justify-center gap-3 cursor-pointer transition-all overflow-hidden relative group",
+                        cvFormData.paymentImageUrl ? "border-green-400 bg-green-50" : "border-slate-200 bg-slate-50 hover:border-yellow-400 hover:bg-yellow-50"
+                      )}
+                    >
+                      {cvFormData.paymentImageUrl ? (
+                        <>
+                          <img src={cvFormData.paymentImageUrl} alt="Payment" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <p className="text-white text-[10px] font-black uppercase tracking-widest">Thay đổi ảnh</p>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCvFormData(prev => ({ ...prev, paymentImageUrl: '' }));
+                            }}
+                            className="absolute top-4 right-4 p-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-yellow-500 group-hover:scale-110 transition-all">
+                            <Upload size={20} />
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs font-bold text-slate-600">Bấm để tải ảnh chuyển khoản</p>
+                            <p className="text-[9px] font-medium text-slate-400 mt-1 uppercase tracking-tight">Kích thước phim dưới 1MB</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    <input 
+                      id="payment-upload" 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleImageUpload}
+                    />
+                    {cvFormData.paymentImageUrl && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-green-100/50 rounded-xl text-[9px] font-bold text-green-700">
+                        <CheckCircle2 size={12} />
+                        <span>Đã tải lên ảnh minh chứng thành công</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <button type="submit" disabled={isSubmittingCV}
+                    className="w-full py-4 bg-amber-950 text-yellow-400 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50">
+                    {isSubmittingCV ? 'Đang lưu...' : 'Lưu Hồ Sơ CV'}
+                  </button>
+                </form>
+              ) : (
+                <div className="space-y-8">
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 text-center block">Nhập mã PIN CV để xem thông tin</label>
+                    <div className="flex gap-2">
+                      <input type="password" placeholder="Nhập mã PIN của bạn" 
+                        value={cvSearchPIN} onChange={(e) => setCvSearchPIN(e.target.value)}
+                        className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest text-center" />
+                      <button onClick={handleCVSearch} disabled={isSearchingCV}
+                        className="px-8 bg-yellow-400 text-amber-950 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-yellow-300 transition-all shadow-lg active:scale-95 disabled:opacity-50">
+                        {isSearchingCV ? '...' : 'Tìm'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {foundCV && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                      className="p-8 bg-yellow-50 rounded-3xl border border-yellow-200 space-y-6">
+                      <div className="flex items-center justify-between border-b border-yellow-200 pb-4">
+                        <h4 className="text-xl font-black text-slate-900 tracking-tight">{foundCV.fullName}</h4>
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest",
+                            foundCV.status === 'approved' ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700 animate-pulse"
+                          )}>
+                            {foundCV.status === 'approved' ? 'Đã phê duyệt' : 'Chờ phê duyệt'}
+                          </span>
+                          <button 
+                            onClick={() => exportSingleCV(foundCV)}
+                            className="p-2 bg-white text-green-600 rounded-lg hover:bg-green-50 transition-colors shadow-sm border border-green-100"
+                            title="Tải CV Excel"
+                          >
+                            <Download size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {foundCV.status !== 'approved' && (
+                        <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl text-[10px] text-orange-600 font-bold flex items-center gap-2">
+                          <Clock size={12} />
+                          <span>Hồ sơ của bạn đang chờ quản trị viên kiểm tra và phê duyệt.</span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-6">
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Học viên</p>
+                          <p className="text-xs font-bold text-slate-700">{foundCV.age} tuổi</p>
+                          <p className="text-xs font-medium text-slate-500">{foundCV.job}</p>
+                          <p className="text-xs font-medium text-slate-500 truncate">{foundCV.address}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Liên hệ</p>
+                          <p className="text-xs font-bold text-slate-700">{foundCV.phone}</p>
+                        </div>
+                        <div className="col-span-2 pt-2 border-t border-yellow-100">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold text-slate-700">{foundCV.guideName}</p>
+                            <p className="text-[10px] font-black text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded-lg">SĐT: ...{foundCV.guidePhoneLast4}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mong muốn</p>
+                        <p className="text-xs text-slate-800 leading-relaxed font-medium bg-white/50 p-4 rounded-xl border border-white/50 italic">{foundCV.target}</p>
+                      </div>
+
+                      {foundCV.paymentImageUrl && (
+                        <div className="space-y-3">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Minh chứng chuyển khoản</p>
+                          <div className="rounded-2xl overflow-hidden border border-yellow-200 bg-white">
+                            <img src={foundCV.paymentImageUrl} alt="Chuyển khoản" className="w-full h-auto max-h-64 object-contain" />
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Manage Appointment Modal */}
       <AnimatePresence>
