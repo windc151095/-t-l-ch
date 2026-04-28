@@ -126,7 +126,7 @@ interface CV {
 }
 
 // --- Constants ---
-const REVIEWERS = ['Sư Huynh', 'BP. Quản lý', 'BP. Nhân sự'];
+const REVIEWERS = ['Đức Toàn', 'Thành Công', 'Ngọc Ánh'];
 const SLOT_DURATION = 30; // minutes
 
 export default function App() {
@@ -181,12 +181,12 @@ export default function App() {
   const [cvAutoFillText, setCvAutoFillText] = useState('');
   const [now, setNow] = useState(new Date());
   const [overviewTab, setOverviewTab] = useState<'active' | 'past' | 'empty'>('active');
+  const [localReviewers, setLocalReviewers] = useState<Record<string, string>>({});
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [cvActionModal, setCvActionModal] = useState<{ 
     show: boolean; 
     cvId: string; 
     type: 'approve' | 'reject' | 'restore' | null;
-    processedBy?: string;
   }>({ show: false, cvId: '', type: null });
   const [adminPinInput, setAdminPinInput] = useState('');
   const [isProcessingAction, setIsProcessingAction] = useState(false);
@@ -746,57 +746,51 @@ export default function App() {
     }
   };
 
-  const handleCVAction = (cvId: string, type: 'approve' | 'reject' | 'restore') => {
-    // For approve/reject, if there's no complex modal needed according to the user,
-    // but we need to pick a "Reviewer", we show the modal with reviewer selection.
-    // For restore, we also need PIN.
-    setCvActionModal({ 
-      show: true, 
-      cvId, 
-      type, 
-      processedBy: REVIEWERS[0] // default to first reviewer
-    });
-    
+  const handleCVAction = async (cvId: string, type: 'approve' | 'reject' | 'restore') => {
     if (type === 'restore') {
+      setCvActionModal({ show: true, cvId, type });
       setAdminPinInput('');
     } else {
-      setAdminPinInput('123456'); // Auto-fill for non-restore actions
+      if (!isAdmin) return;
+      
+      const selectedReviewer = localReviewers[cvId] || REVIEWERS[0];
+      setIsProcessingAction(true);
+      try {
+        const newStatus: CV['status'] = type === 'approve' ? 'approved' : 'rejected';
+        
+        await updateDoc(doc(db, 'cvs', cvId), {
+          status: newStatus,
+          processedAt: serverTimestamp(),
+          processedBy: selectedReviewer,
+          adminAuth: '123456'
+        });
+      } catch (err) {
+        console.error("CV Action error:", err);
+        handleFirestoreError(err, 'update', `cvs/${cvId}`);
+      } finally {
+        setIsProcessingAction(false);
+      }
     }
   };
 
   const confirmCVAction = async () => {
     if (!isAdmin || !cvActionModal.cvId || !cvActionModal.type) return;
     
-    // Check PIN only if it's a restore action
-    if (cvActionModal.type === 'restore' && adminPinInput !== '123456') {
+    // modal is only used for restore now
+    if (adminPinInput !== '123456') {
       alert("Mật khẩu quản trị không chính xác!");
       return;
     }
 
     setIsProcessingAction(true);
     try {
-      let newStatus: CV['status'] = 'pending';
-      let actionLabel = '';
-
-      if (cvActionModal.type === 'approve') {
-        newStatus = 'approved';
-        actionLabel = 'phê duyệt';
-      } else if (cvActionModal.type === 'reject') {
-        newStatus = 'rejected';
-        actionLabel = 'từ chối';
-      } else if (cvActionModal.type === 'restore') {
-        newStatus = 'pending';
-        actionLabel = 'khôi phục';
-      }
-
       await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
-        status: newStatus,
+        status: 'pending',
         processedAt: serverTimestamp(),
-        processedBy: cvActionModal.processedBy || '',
+        processedBy: '', // clear reviewer on restore
         adminAuth: '123456'
       });
       
-      alert(`Đã ${actionLabel} hồ sơ thành công!`);
       setCvActionModal({ show: false, cvId: '', type: null });
     } catch (err) {
       console.error("CV Action error:", err);
@@ -1974,11 +1968,11 @@ export default function App() {
                               cv.status === 'approved' ? "bg-green-500" : "bg-orange-400 animate-pulse"
                             )} />
                             
-                             <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pl-2 text-left">
+                             <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 pl-2 text-left items-start">
                                <div>
                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Học viên</p>
                                  <h4 className="font-bold text-slate-900 text-sm">{cv.fullName} ({cv.age}t)</h4>
-                                 <p className="text-xs font-medium text-slate-600 select-all">{cv.phone}</p>
+                                 <p className="text-sm font-medium text-slate-600 select-all">{cv.phone}</p>
                                </div>
                                <div>
                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
@@ -1989,67 +1983,84 @@ export default function App() {
                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">PIN: {cv.password}</span>
                                  </div>
                                </div>
-                               <div className="flex items-center gap-2">
-                                 {cv.paymentImageUrl && (
-                                   <div className="space-y-1">
-                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Ảnh CK</p>
-                                     <button 
-                                       onClick={() => setSelectedPaymentImage(cv.paymentImageUrl || null)}
-                                       className="p-2 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors border border-blue-200 flex items-center gap-2 shadow-sm"
-                                     >
-                                       <ImageIcon size={16} />
-                                       <span className="text-[10px] font-black uppercase">Xem ảnh</span>
-                                     </button>
-                                   </div>
+                               <div>
+                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">BILL CHUYỂN KHOẢN</p>
+                                 {cv.paymentImageUrl ? (
+                                   <button 
+                                     onClick={() => setSelectedPaymentImage(cv.paymentImageUrl || null)}
+                                     className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 flex items-center gap-2 shadow-sm w-fit"
+                                   >
+                                     <ImageIcon size={14} />
+                                     <span className="text-[9px] font-black uppercase tracking-wider">Xem ảnh</span>
+                                   </button>
+                                 ) : (
+                                   <p className="text-[10px] font-medium text-slate-400 italic">Không có ảnh</p>
                                  )}
                                </div>
-                               <div className="flex items-center lg:justify-end gap-3 lg:col-span-1">
-                                 <div className="text-right hidden sm:block mr-2">
+                               
+                               <div>
+                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Người duyệt</p>
+                                 {cv.status === 'pending' ? (
+                                   <select
+                                     className="text-[10px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400 transition-colors cursor-pointer uppercase tracking-wide"
+                                     value={localReviewers[cv.id] || REVIEWERS[0]}
+                                     onChange={(e) => setLocalReviewers(prev => ({ ...prev, [cv.id]: e.target.value }))}
+                                   >
+                                     {REVIEWERS.map(r => (
+                                       <option key={r} value={r}>{r}</option>
+                                     ))}
+                                   </select>
+                                 ) : (
+                                   <p className="text-[10px] font-bold text-slate-600 uppercase mt-1">{cv.processedBy || 'Chưa rõ'}</p>
+                                 )}
+                               </div>
+                               
+                               <div className="flex flex-col gap-2">
+                                 <div className="hidden sm:block">
                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Trạng thái</p>
-                                   <p className={cn(
-                                     "text-[10px] font-black uppercase tracking-wider",
-                                     cv.status === 'approved' ? "text-green-600" : (cv.status === 'rejected' ? "text-red-600" : "text-orange-600")
-                                   )}>
-                                     {cv.status === 'approved' ? '✓ Đã duyệt' : (cv.status === 'rejected' ? '✕ Từ chối' : '● Chờ duyệt')}
-                                   </p>
-                                   {cv.processedBy && (
-                                     <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase italic">Duyệt bởi: {cv.processedBy}</p>
-                                   )}
+                                   <div className="flex items-center gap-2">
+                                     <p className={cn(
+                                       "text-[10px] font-black uppercase tracking-wider",
+                                       cv.status === 'approved' ? "text-green-600" : (cv.status === 'rejected' ? "text-red-600" : "text-orange-600")
+                                     )}>
+                                       {cv.status === 'approved' ? '✓ Đã duyệt' : (cv.status === 'rejected' ? '✕ Từ chối' : '● Chờ duyệt')}
+                                     </p>
+                                   </div>
                                  </div>
                                  
                                  {cv.status === 'pending' ? (
                                    <div className="flex items-center gap-2">
                                      <button 
                                       onClick={() => handleCVAction(cv.id, 'approve')}
-                                      className="p-2.5 bg-green-50 text-green-600 hover:bg-green-100 rounded-2xl transition-all border border-green-100 shadow-sm"
+                                      className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-xl transition-all border border-green-100 shadow-sm"
                                       title="Phê duyệt"
                                      >
-                                      <Check size={18} strokeWidth={3} />
+                                      <Check size={16} strokeWidth={3} />
                                      </button>
                                      <button 
                                       onClick={() => handleCVAction(cv.id, 'reject')}
-                                      className="p-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all border border-red-100 shadow-sm"
+                                      className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
                                       title="Từ chối"
                                      >
-                                      <X size={18} strokeWidth={3} />
+                                      <X size={16} strokeWidth={3} />
                                      </button>
                                    </div>
                                  ) : (
                                    <div className="flex items-center gap-2">
                                      <button 
                                       onClick={() => handleCVAction(cv.id, 'restore')}
-                                      className="p-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-2xl transition-all border border-blue-100 shadow-sm"
+                                      className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
                                       title="Khôi phục về chờ duyệt"
                                      >
-                                      <RotateCcw size={18} strokeWidth={3} />
+                                      <RotateCcw size={16} strokeWidth={3} />
                                      </button>
                                      {cv.status === 'approved' && (
                                        <button 
                                         onClick={() => handleCVAction(cv.id, 'reject')}
-                                        className="p-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all border border-red-100 shadow-sm"
+                                        className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
                                         title="Từ chối"
                                        >
-                                        <X size={18} strokeWidth={3} />
+                                        <X size={16} strokeWidth={3} />
                                        </button>
                                      )}
                                    </div>
@@ -2097,39 +2108,17 @@ export default function App() {
 
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">NGƯỜI DUYỆT</label>
-                    <div className="grid grid-cols-1 gap-2">
-                      {REVIEWERS.map(reviewer => (
-                        <button
-                          key={reviewer}
-                          onClick={() => setCvActionModal(prev => ({ ...prev, processedBy: reviewer }))}
-                          className={cn(
-                            "w-full px-5 py-3 rounded-2xl text-xs font-bold transition-all text-left border-2",
-                            cvActionModal.processedBy === reviewer
-                              ? "bg-yellow-50 border-yellow-400 text-amber-950 shadow-sm"
-                              : "bg-white border-slate-100 text-slate-600 hover:bg-slate-50"
-                          )}
-                        >
-                          {reviewer}
-                        </button>
-                      ))}
-                    </div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">MẬT KHẨU ADMIN</label>
+                    <input 
+                      autoFocus
+                      type="password" 
+                      placeholder="••••••" 
+                      value={adminPinInput}
+                      onChange={(e) => setAdminPinInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && confirmCVAction()}
+                      className="w-full px-7 py-4 bg-yellow-50/50 border border-transparent focus:border-yellow-200 outline-none rounded-3xl font-black text-slate-800 transition-all placeholder:text-slate-300" 
+                    />
                   </div>
-
-                  {cvActionModal.type === 'restore' && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">MẬT KHẨU ADMIN</label>
-                      <input 
-                        autoFocus
-                        type="password" 
-                        placeholder="••••••" 
-                        value={adminPinInput}
-                        onChange={(e) => setAdminPinInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && confirmCVAction()}
-                        className="w-full px-7 py-4 bg-yellow-50/50 border border-transparent focus:border-yellow-200 outline-none rounded-3xl font-black text-slate-800 transition-all placeholder:text-slate-300" 
-                      />
-                    </div>
-                  )}
                 </div>
 
                 <div className="bg-yellow-50 p-4 rounded-3xl border border-yellow-100 flex items-start gap-3">
@@ -2137,13 +2126,13 @@ export default function App() {
                     <AlertCircle size={16} />
                   </div>
                   <p className="text-[10px] text-yellow-700 font-bold leading-relaxed">
-                    Lưu ý: Đây là thao tác quản trị hệ thống. Hãy đảm bảo bạn chọn đúng người duyệt.
+                    Lưu ý: Đây là thao tác quản trị hệ thống. Hãy đảm bảo bạn có quyền thực hiện hành động này.
                   </p>
                 </div>
 
                 <button 
                   onClick={confirmCVAction}
-                  disabled={isProcessingAction || (cvActionModal.type === 'restore' && !adminPinInput)}
+                  disabled={isProcessingAction || !adminPinInput}
                   className="w-full py-5 bg-yellow-400 text-amber-950 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-yellow-300 transition-all shadow-xl shadow-yellow-200 active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
                 >
                   {isProcessingAction ? 'ĐANG XỬ LÝ...' : 'XÁC NHẬN THỰC HIỆN'}
