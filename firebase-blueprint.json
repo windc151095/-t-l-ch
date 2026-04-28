@@ -73,7 +73,10 @@
         "paymentImageUrl": { "type": "string", "description": "Lưu ảnh minh chứng chuyển khoản (Base64 hoặc URL)." },
         "createdAt": { "type": "string", "format": "date-time" },
         "processedAt": { "type": "string", "format": "date-time" },
-        "processedBy": { "type": "string", "description": "Người thực hiện phê duyệt/từ chối." }
+        "processedBy": { "type": "string", "description": "Người thực hiện phê duyệt/từ chối." },
+        "appApproved": { "type": "boolean", "description": "Trạng thái phê duyệt cấp tài khoản app." },
+        "appApprovedBy": { "type": "string", "description": "Người phê duyệt cấp tài khoản app." },
+        "appApprovedAt": { "type": "string", "format": "date-time", "description": "Thời gian phê duyệt cấp tài khoản app." }
       },
       "required": ["fullName", "phone", "age", "guideName", "guidePhoneLast4", "password", "status", "createdAt"]
     }

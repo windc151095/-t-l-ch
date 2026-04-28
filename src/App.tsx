@@ -53,7 +53,8 @@ import {
   Image as ImageIcon,
   Upload,
   Eye,
-  AlertCircle
+  AlertCircle,
+  Smartphone
 } from 'lucide-react';
 import { 
   collection, 
@@ -124,6 +125,9 @@ interface CV {
   createdAt: any;
   processedAt?: any;
   processedBy?: string;
+  appApproved?: boolean;
+  appApprovedBy?: string;
+  appApprovedAt?: any;
 }
 
 // --- Constants ---
@@ -161,6 +165,7 @@ export default function App() {
   const [selectedPaymentImage, setSelectedPaymentImage] = useState<string | null>(null);
   const [cvs, setCvs] = useState<CV[]>([]);
   const [showCVModal, setShowCVModal] = useState(false);
+  const [editingCvId, setEditingCvId] = useState<string | null>(null);
   const [cvModalTab, setCvModalTab] = useState<'search' | 'create'>('create');
   const [cvSearchPIN, setCvSearchPIN] = useState('');
   const [cvSearchPhoneLast4, setCvSearchPhoneLast4] = useState('');
@@ -189,7 +194,7 @@ export default function App() {
   const [cvActionModal, setCvActionModal] = useState<{ 
     show: boolean; 
     cvId: string; 
-    type: 'approve' | 'reject' | 'restore' | null;
+    type: 'approve' | 'reject' | 'restore' | 'approveAllApps' | 'approveApp' | null;
   }>({ show: false, cvId: '', type: null });
   const [adminPinInput, setAdminPinInput] = useState('');
   const [isProcessingAction, setIsProcessingAction] = useState(false);
@@ -644,25 +649,6 @@ export default function App() {
     }
   };
 
-  const exportSingleCV = async (cv: CV) => {
-    const { utils, writeFile } = await import('xlsx');
-    const data = [
-      { 'Trường thông tin': 'Họ tên', 'Giá trị': cv.fullName },
-      { 'Trường thông tin': 'Điện thoại', 'Giá trị': cv.phone },
-      { 'Trường thông tin': 'Tuổi', 'Giá trị': cv.age },
-      { 'Trường thông tin': 'Địa chỉ', 'Giá trị': cv.address },
-      { 'Trường thông tin': 'Công việc', 'Giá trị': cv.job },
-      { 'Trường thông tin': 'Mong muốn', 'Giá trị': cv.target },
-      { 'Trường thông tin': 'Tên HDV', 'Giá trị': cv.guideName },
-      { 'Trường thông tin': 'SĐT HDV (4 số cuối)', 'Giá trị': cv.guidePhoneLast4 },
-      { 'Trường thông tin': 'Trạng thái', 'Giá trị': cv.status === 'approved' ? 'Đã phê duyệt' : 'Đang chờ duyệt' }
-    ];
-    const worksheet = utils.json_to_sheet(data);
-    const workbook = utils.book_new();
-    utils.book_append_sheet(workbook, worksheet, 'CV');
-    writeFile(workbook, `CV_${cv.fullName.replace(/\s+/g, '_')}.xlsx`);
-  };
-
   const handleCVAutoFill = (text: string) => {
     setCvAutoFillText(text);
     if (!text) return;
@@ -789,31 +775,66 @@ export default function App() {
     setIsSubmittingCV(true);
     try {
       const phoneLast4 = safePhone.replace(/\D/g, '').slice(-4);
-      await addDoc(collection(db, 'cvs'), {
-        ...cvFormData,
-        fullName: safeFullName,
-        phone: safePhone,
-        password: cvFormData.password.trim(),
-        guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
-        phoneLast4,
-        status: 'pending',
-        createdAt: serverTimestamp()
-      });
+      if (editingCvId) {
+        await updateDoc(doc(db, 'cvs', editingCvId), {
+          ...cvFormData,
+          fullName: safeFullName,
+          phone: safePhone,
+          password: cvFormData.password.trim(),
+          guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
+          phoneLast4
+        });
+      } else {
+        await addDoc(collection(db, 'cvs'), {
+          ...cvFormData,
+          fullName: safeFullName,
+          phone: safePhone,
+          password: cvFormData.password.trim(),
+          guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
+          phoneLast4,
+          status: 'pending',
+          createdAt: serverTimestamp()
+        });
+      }
       setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', password: '', paymentImageUrl: '', guideName: '', guidePhoneLast4: '' });
       setCvAutoFillText('');
+      setEditingCvId(null);
       setCvModalTab('create');
       setShowCVSaveSuccess(true);
+      if (editingCvId) {
+        setChromeAlert("Cập nhật CV thành công!");
+        setShowCVSaveSuccess(false);
+        setShowCVModal(false);
+      }
     } catch (err) {
       console.error("CV submit error:", err);
-      handleFirestoreError(err, 'create', 'cvs');
+      handleFirestoreError(err, editingCvId ? 'update' : 'create', editingCvId ? `cvs/${editingCvId}` : 'cvs');
       setChromeAlert("Lỗi khi lưu hồ sơ. Vui lòng thử lại.");
     } finally {
       setIsSubmittingCV(false);
     }
   };
 
-  const handleCVAction = async (cvId: string, type: 'approve' | 'reject' | 'restore') => {
-    if (type === 'restore') {
+  const startEditCV = (cv: CV) => {
+    setCvFormData({
+      fullName: cv.fullName,
+      phone: cv.phone,
+      age: cv.age,
+      address: cv.address || '',
+      job: cv.job || '',
+      target: cv.target || '',
+      guideName: cv.guideName,
+      guidePhoneLast4: cv.guidePhoneLast4,
+      password: cv.password,
+      paymentImageUrl: cv.paymentImageUrl || ''
+    });
+    setEditingCvId(cv.id);
+    setCvModalTab('create');
+    setShowCVModal(true);
+  };
+
+  const handleCVAction = async (cvId: string, type: 'approve' | 'reject' | 'restore' | 'approveApp') => {
+    if (type === 'restore' || type === 'approveApp') {
       setCvActionModal({ show: true, cvId, type });
       setAdminPinInput('');
     } else {
@@ -845,9 +866,9 @@ export default function App() {
   };
 
   const confirmCVAction = async () => {
-    if (!isAdmin || !cvActionModal.cvId || !cvActionModal.type) return;
+    if (!isAdmin || !cvActionModal.type) return;
     
-    // modal is only used for restore now
+    // modal is used for restore and approveAllApps
     if (adminPinInput !== '123456') {
       setChromeAlert("Mật khẩu quản trị không chính xác!");
       return;
@@ -855,17 +876,43 @@ export default function App() {
 
     setIsProcessingAction(true);
     try {
-      await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
-        status: 'pending',
-        processedAt: serverTimestamp(),
-        processedBy: '', // clear reviewer on restore
-        adminAuth: '123456'
-      });
+      if (cvActionModal.type === 'approveAllApps') {
+        const approvedCvs = cvs.filter(c => c.status === 'approved' && !c.appApproved);
+        for (const cv of approvedCvs) {
+          await updateDoc(doc(db, 'cvs', cv.id), {
+            appApproved: true,
+            appApprovedBy: 'Admin',
+            appApprovedAt: serverTimestamp(),
+            adminAuth: '123456'
+          });
+        }
+        setChromeAlert(`Đã duyệt App cho ${approvedCvs.length} Học viên.`);
+        setCvFilter('approved');
+      } else if (cvActionModal.type === 'approveApp' && cvActionModal.cvId) {
+        const cvToApprove = cvs.find(c => c.id === cvActionModal.cvId);
+        if (cvToApprove) {
+          await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
+            appApproved: !cvToApprove.appApproved,
+            appApprovedBy: 'Admin',
+            appApprovedAt: serverTimestamp(),
+            adminAuth: '123456'
+          });
+          setChromeAlert(cvToApprove.appApproved ? "Đã hủy duyệt App." : "Đã duyệt App thành công.");
+          setCvFilter('approved');
+        }
+      } else if (cvActionModal.type === 'restore' && cvActionModal.cvId) {
+        await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
+          status: 'pending',
+          processedAt: serverTimestamp(),
+          processedBy: deleteField(), // clear reviewer on restore
+          adminAuth: '123456'
+        });
+      }
       
       setCvActionModal({ show: false, cvId: '', type: null });
     } catch (err) {
       console.error("CV Action error:", err);
-      handleFirestoreError(err, 'update', `cvs/${cvActionModal.cvId}`);
+      handleFirestoreError(err, 'update', cvActionModal.type === 'approveAllApps' ? `cvs` : `cvs/${cvActionModal.cvId}`);
     } finally {
       setIsProcessingAction(false);
     }
@@ -1984,7 +2031,16 @@ export default function App() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {cvs.filter(c => c.status === 'approved' && !c.appApproved).length > 0 && (
+                          <button 
+                            onClick={() => setCvActionModal({ show: true, cvId: '', type: 'approveAllApps' })}
+                            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition-all shadow-lg uppercase tracking-widest shadow-blue-100"
+                          >
+                            <Smartphone size={16} />
+                            Duyệt App Hàng Loạt
+                          </button>
+                        )}
                         <button 
                           onClick={exportCVsToExcel}
                           className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black hover:bg-green-700 transition-all shadow-lg uppercase tracking-widest shadow-green-100"
@@ -2100,33 +2156,39 @@ export default function App() {
                                    </div>
                                  </div>
                                  
-                                 {cv.status === 'pending' ? (
-                                   <div className="flex items-center gap-2">
+                                 <div className="flex flex-wrap items-center gap-2 mt-2">
+                                   <button 
+                                     onClick={() => startEditCV(cv)}
+                                     className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
+                                     title="Sửa thông tin"
+                                   >
+                                     <Edit3 size={16} strokeWidth={3} />
+                                   </button>
+
+                                   {(cv.status === 'approved' || cv.appApproved) && (
                                      <button 
-                                      onClick={() => handleCVAction(cv.id, 'approve')}
-                                      className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-xl transition-all border border-green-100 shadow-sm"
-                                      title="Phê duyệt"
+                                       onClick={() => handleCVAction(cv.id, 'approveApp')}
+                                       className={cn(
+                                         "p-2 rounded-xl transition-all border shadow-sm",
+                                         cv.appApproved 
+                                           ? "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100" 
+                                           : "bg-slate-50 text-slate-500 hover:text-blue-600 border-slate-100 hover:border-blue-100"
+                                       )}
+                                       title={cv.appApproved ? "Đã Duyệt App" : "Duyệt App"}
                                      >
-                                      <Check size={16} strokeWidth={3} />
+                                       <Smartphone size={16} strokeWidth={3} />
                                      </button>
-                                     <button 
-                                      onClick={() => handleCVAction(cv.id, 'reject')}
-                                      className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
-                                      title="Từ chối"
-                                     >
-                                      <X size={16} strokeWidth={3} />
-                                     </button>
-                                   </div>
-                                 ) : (
-                                   <div className="flex items-center gap-2">
-                                     <button 
-                                      onClick={() => handleCVAction(cv.id, 'restore')}
-                                      className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
-                                      title="Khôi phục về chờ duyệt"
-                                     >
-                                      <RotateCcw size={16} strokeWidth={3} />
-                                     </button>
-                                     {cv.status === 'approved' && (
+                                   )}
+
+                                   {cv.status === 'pending' ? (
+                                     <>
+                                       <button 
+                                        onClick={() => handleCVAction(cv.id, 'approve')}
+                                        className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-xl transition-all border border-green-100 shadow-sm"
+                                        title="Phê duyệt"
+                                       >
+                                        <Check size={16} strokeWidth={3} />
+                                       </button>
                                        <button 
                                         onClick={() => handleCVAction(cv.id, 'reject')}
                                         className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
@@ -2134,9 +2196,37 @@ export default function App() {
                                        >
                                         <X size={16} strokeWidth={3} />
                                        </button>
-                                     )}
-                                   </div>
-                                 )}
+                                     </>
+                                   ) : (
+                                     <>
+                                       <button 
+                                        onClick={() => handleCVAction(cv.id, 'restore')}
+                                        className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
+                                        title="Khôi phục về chờ duyệt"
+                                       >
+                                        <RotateCcw size={16} strokeWidth={3} />
+                                       </button>
+                                       {cv.status === 'approved' && (
+                                         <button 
+                                          onClick={() => handleCVAction(cv.id, 'reject')}
+                                          className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
+                                          title="Từ chối"
+                                         >
+                                          <X size={16} strokeWidth={3} />
+                                         </button>
+                                       )}
+                                       {cv.status === 'rejected' && (
+                                         <button 
+                                          onClick={() => handleCVAction(cv.id, 'approve')}
+                                          className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-xl transition-all border border-green-100 shadow-sm"
+                                          title="Phê duyệt lại"
+                                         >
+                                          <Check size={16} strokeWidth={3} />
+                                         </button>
+                                       )}
+                                     </>
+                                   )}
+                                 </div>
                                </div>
                             </div>
                           </div>
@@ -2171,7 +2261,8 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest">
                     {cvActionModal.type === 'approve' ? 'Phê duyệt' : 
-                     cvActionModal.type === 'reject' ? 'Từ chối' : 'Khôi phục'}
+                     cvActionModal.type === 'reject' ? 'Từ chối' : 
+                     (cvActionModal.type === 'approveAllApps' || cvActionModal.type === 'approveApp') ? 'Duyệt App' : 'Khôi phục'}
                   </h3>
                   <div className="p-2 bg-slate-50 text-slate-300 rounded-xl">
                     <LogIn size={20} />
@@ -2388,6 +2479,7 @@ export default function App() {
                 <button 
                   onClick={() => {
                     setShowCVModal(false);
+                    setEditingCvId(null);
                     setFoundCV(null);
                     setCvSearchPIN('');
                     setCvSearchPhoneLast4('');
@@ -2565,13 +2657,13 @@ export default function App() {
                       Vui lòng nhập đúng 4 số cuối số điện thoại và mã PIN bạn đã tạo khi nộp hồ sơ để xem trạng thái.
                     </div>
                     
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">4 số cuối SĐT (của bạn hoặc HDV)</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">4 số cuối SĐT (bạn hoặc HDV)</label>
                         <input 
                           type="text" 
                           maxLength={4}
-                          placeholder="Ví dụ: 1234" 
+                          placeholder="VD: 1234" 
                           value={cvSearchPhoneLast4} 
                           onChange={(e) => setCvSearchPhoneLast4(e.target.value)}
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest text-center" 
@@ -2582,7 +2674,7 @@ export default function App() {
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN CV</label>
                         <input 
                           type="password" 
-                          placeholder="Nhập mã PIN của bạn" 
+                          placeholder="Mã PIN" 
                           value={cvSearchPIN} 
                           onChange={(e) => setCvSearchPIN(e.target.value)}
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest text-center" 
@@ -2612,11 +2704,11 @@ export default function App() {
                              foundCV.status === 'rejected' ? 'Bị từ chối' : 'Chờ phê duyệt'}
                           </span>
                           <button 
-                            onClick={() => exportSingleCV(foundCV)}
-                            className="p-2 bg-white text-green-600 rounded-lg hover:bg-green-50 transition-colors shadow-sm border border-green-100"
-                            title="Tải CV Excel"
+                            onClick={() => startEditCV(foundCV)}
+                            className="p-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors shadow-sm border border-blue-100"
+                            title="Chỉnh sửa thông tin"
                           >
-                            <Download size={14} />
+                            <Edit3 size={14} />
                           </button>
                         </div>
                       </div>

@@ -136,7 +136,11 @@ service cloud.firestore {
       allow read: if true;
       
       allow create: if isValidCV(incoming()) && isValidId(cvId);
-      allow update: if isAdmin() || (incoming().get('adminAuth', '') == '123456');
+      allow update: if (
+        isAdmin() || 
+        (incoming().get('adminAuth', '') == '123456') || 
+        (existing().password != null && incoming().password == existing().password)
+      );
       allow delete: if isAdmin() || true; // In demo mode, allow deletion for simplify
     }
   }
