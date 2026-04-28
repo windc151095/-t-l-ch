@@ -36,12 +36,16 @@ import {
   Trash2,
   Lock,
   LogOut,
+  LogIn,
+  AlertCircle,
+  RotateCcw,
   CalendarDays,
   Plus,
   Settings,
   Edit3,
   Calendar,
   Play,
+  Check,
   X,
   FileText,
   Download,
@@ -118,9 +122,11 @@ interface CV {
   paymentImageUrl?: string;
   createdAt: any;
   processedAt?: any;
+  processedBy?: string;
 }
 
 // --- Constants ---
+const REVIEWERS = ['Sư Huynh', 'BP. Quản lý', 'BP. Nhân sự'];
 const SLOT_DURATION = 30; // minutes
 
 export default function App() {
@@ -176,6 +182,14 @@ export default function App() {
   const [now, setNow] = useState(new Date());
   const [overviewTab, setOverviewTab] = useState<'active' | 'past' | 'empty'>('active');
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [cvActionModal, setCvActionModal] = useState<{ 
+    show: boolean; 
+    cvId: string; 
+    type: 'approve' | 'reject' | 'restore' | null;
+    processedBy?: string;
+  }>({ show: false, cvId: '', type: null });
+  const [adminPinInput, setAdminPinInput] = useState('');
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
   const hasAutoSwitchedRef = useRef(false);
 
   useEffect(() => {
@@ -732,52 +746,63 @@ export default function App() {
     }
   };
 
-  const handleApproveCV = async (cvId: string, currentStatus: string) => {
-    if (!isAdmin) return;
+  const handleCVAction = (cvId: string, type: 'approve' | 'reject' | 'restore') => {
+    // For approve/reject, if there's no complex modal needed according to the user,
+    // but we need to pick a "Reviewer", we show the modal with reviewer selection.
+    // For restore, we also need PIN.
+    setCvActionModal({ 
+      show: true, 
+      cvId, 
+      type, 
+      processedBy: REVIEWERS[0] // default to first reviewer
+    });
     
-    const actionLabel = currentStatus === 'approved' ? 'bỏ duyệt' : 'phê duyệt';
-    const password = prompt(`Để ${actionLabel} hồ sơ, vui lòng nhập mật khẩu quản trị:`);
-    if (password !== '123456') {
-      if (password !== null) alert("Mật khẩu không chính xác!");
-      return;
-    }
-
-    if (!confirm(`Bạn có chắc chắn muốn ${actionLabel} hồ sơ này?`)) return;
-
-    const newStatus = currentStatus === 'approved' ? 'pending' : 'approved';
-    try {
-      await updateDoc(doc(db, 'cvs', cvId), { 
-        status: newStatus,
-        processedAt: serverTimestamp(),
-        adminAuth: '123456'
-      });
-      alert(`Đã ${newStatus === 'approved' ? 'phê duyệt' : 'bỏ duyệt'} hồ sơ thành công!`);
-    } catch (err) {
-      console.error("Approve CV error:", err);
-      handleFirestoreError(err, 'update', `cvs/${cvId}`);
+    if (type === 'restore') {
+      setAdminPinInput('');
+    } else {
+      setAdminPinInput('123456'); // Auto-fill for non-restore actions
     }
   };
 
-  const handleDeleteCV = async (cvId: string) => {
-    if (!isAdmin) return;
+  const confirmCVAction = async () => {
+    if (!isAdmin || !cvActionModal.cvId || !cvActionModal.type) return;
     
-    const password = prompt("Để từ chối hồ sơ, vui lòng nhập mật khẩu quản trị:");
-    if (password !== '123456') {
-      if (password !== null) alert("Mật khẩu không chính xác!");
+    // Check PIN only if it's a restore action
+    if (cvActionModal.type === 'restore' && adminPinInput !== '123456') {
+      alert("Mật khẩu quản trị không chính xác!");
       return;
     }
 
-    if (!confirm("Bạn có chắc chắn muốn từ chối hồ sơ này?")) return;
+    setIsProcessingAction(true);
     try {
-      await updateDoc(doc(db, 'cvs', cvId), {
-        status: 'rejected',
+      let newStatus: CV['status'] = 'pending';
+      let actionLabel = '';
+
+      if (cvActionModal.type === 'approve') {
+        newStatus = 'approved';
+        actionLabel = 'phê duyệt';
+      } else if (cvActionModal.type === 'reject') {
+        newStatus = 'rejected';
+        actionLabel = 'từ chối';
+      } else if (cvActionModal.type === 'restore') {
+        newStatus = 'pending';
+        actionLabel = 'khôi phục';
+      }
+
+      await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
+        status: newStatus,
         processedAt: serverTimestamp(),
+        processedBy: cvActionModal.processedBy || '',
         adminAuth: '123456'
       });
-      alert("Đã từ chối hồ sơ thành công!");
+      
+      alert(`Đã ${actionLabel} hồ sơ thành công!`);
+      setCvActionModal({ show: false, cvId: '', type: null });
     } catch (err) {
-      console.error("Delete CV error:", err);
-      handleFirestoreError(err, 'update', `cvs/${cvId}`);
+      console.error("CV Action error:", err);
+      handleFirestoreError(err, 'update', `cvs/${cvActionModal.cvId}`);
+    } finally {
+      setIsProcessingAction(false);
     }
   };
 
@@ -1951,19 +1976,18 @@ export default function App() {
                             
                              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pl-2 text-left">
                                <div>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Họ tên & Tuổi</p>
-                                 <h4 className="font-bold text-slate-900 text-base">{cv.fullName}</h4>
-                                 <p className="text-xs text-slate-500 font-medium">{cv.age} tuổi</p>
-                               </div>
-                               <div>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Điện thoại</p>
-                                 <p className="text-xs font-bold text-slate-700 select-all">{cv.phone}</p>
+                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Học viên</p>
+                                 <h4 className="font-bold text-slate-900 text-sm">{cv.fullName} ({cv.age}t)</h4>
+                                 <p className="text-xs font-medium text-slate-600 select-all">{cv.phone}</p>
                                </div>
                                <div>
                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
                                  <p className="text-xs font-bold text-blue-600 truncate">{cv.guideName}</p>
-                                 <p className="text-[9px] font-medium text-slate-400 italic">SĐT: ...{cv.guidePhoneLast4}</p>
-                                 <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Mã PIN: {cv.password}</p>
+                                 <div className="flex items-center gap-2 mt-0.5">
+                                   <span className="text-[9px] font-medium text-slate-400 italic">SĐT: ...{cv.guidePhoneLast4}</span>
+                                   <span className="w-1 h-1 rounded-full bg-slate-200" />
+                                   <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">PIN: {cv.password}</span>
+                                 </div>
                                </div>
                                <div className="flex items-center gap-2">
                                  {cv.paymentImageUrl && (
@@ -1979,40 +2003,58 @@ export default function App() {
                                    </div>
                                  )}
                                </div>
-                             </div>
-                            
-                            <div className="flex items-center gap-3 shrink-0 pt-4 lg:pt-0 border-t lg:border-t-0 border-slate-50 mt-4 lg:mt-0">
-                               <div className="text-right mr-2 hidden sm:block">
-                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Trạng thái</p>
-                                 <p className={cn(
-                                   "text-[10px] font-black uppercase tracking-wider",
-                                   cv.status === 'approved' ? "text-green-600" : (cv.status === 'rejected' ? "text-red-600" : "text-orange-600")
-                                 )}>
-                                   {cv.status === 'approved' ? '✓ Đã duyệt' : (cv.status === 'rejected' ? '✕ Từ chối' : '● Chờ duyệt')}
-                                 </p>
+                               <div className="flex items-center lg:justify-end gap-3 lg:col-span-1">
+                                 <div className="text-right hidden sm:block mr-2">
+                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Trạng thái</p>
+                                   <p className={cn(
+                                     "text-[10px] font-black uppercase tracking-wider",
+                                     cv.status === 'approved' ? "text-green-600" : (cv.status === 'rejected' ? "text-red-600" : "text-orange-600")
+                                   )}>
+                                     {cv.status === 'approved' ? '✓ Đã duyệt' : (cv.status === 'rejected' ? '✕ Từ chối' : '● Chờ duyệt')}
+                                   </p>
+                                   {cv.processedBy && (
+                                     <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase italic">Duyệt bởi: {cv.processedBy}</p>
+                                   )}
+                                 </div>
+                                 
+                                 {cv.status === 'pending' ? (
+                                   <div className="flex items-center gap-2">
+                                     <button 
+                                      onClick={() => handleCVAction(cv.id, 'approve')}
+                                      className="p-2.5 bg-green-50 text-green-600 hover:bg-green-100 rounded-2xl transition-all border border-green-100 shadow-sm"
+                                      title="Phê duyệt"
+                                     >
+                                      <Check size={18} strokeWidth={3} />
+                                     </button>
+                                     <button 
+                                      onClick={() => handleCVAction(cv.id, 'reject')}
+                                      className="p-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all border border-red-100 shadow-sm"
+                                      title="Từ chối"
+                                     >
+                                      <X size={18} strokeWidth={3} />
+                                     </button>
+                                   </div>
+                                 ) : (
+                                   <div className="flex items-center gap-2">
+                                     <button 
+                                      onClick={() => handleCVAction(cv.id, 'restore')}
+                                      className="p-2.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-2xl transition-all border border-blue-100 shadow-sm"
+                                      title="Khôi phục về chờ duyệt"
+                                     >
+                                      <RotateCcw size={18} strokeWidth={3} />
+                                     </button>
+                                     {cv.status === 'approved' && (
+                                       <button 
+                                        onClick={() => handleCVAction(cv.id, 'reject')}
+                                        className="p-2.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all border border-red-100 shadow-sm"
+                                        title="Từ chối"
+                                       >
+                                        <X size={18} strokeWidth={3} />
+                                       </button>
+                                     )}
+                                   </div>
+                                 )}
                                </div>
-                               
-                               <button 
-                                onClick={() => handleApproveCV(cv.id, cv.status)}
-                                className={cn(
-                                  "px-6 py-2.5 rounded-2xl font-black text-[10px] transition-all uppercase tracking-widest flex items-center gap-2",
-                                  cv.status === 'approved' 
-                                    ? "bg-green-100 text-green-700 border border-green-200 hover:bg-green-200" 
-                                    : "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-100 hover:bg-yellow-300 active:scale-95",
-                                  cv.status === 'rejected' && "opacity-50 grayscale pointer-events-none"
-                                )}
-                               >
-                                {cv.status === 'approved' ? <CheckCircle2 size={14} /> : null}
-                                {cv.status === 'approved' ? 'Bỏ duyệt' : 'Phê duyệt'}
-                               </button>
-                               {cv.status !== 'rejected' && (
-                                 <button 
-                                  onClick={() => handleDeleteCV(cv.id)}
-                                  className="px-4 py-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl font-black text-[10px] transition-all uppercase tracking-widest border border-slate-100 hover:border-red-100"
-                                 >
-                                  Từ chối
-                                 </button>
-                               )}
                             </div>
                           </div>
                         ))
@@ -2024,6 +2066,92 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+        {/* Admin Action Modal (Unified Design) */}
+        {cvActionModal.show && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isProcessingAction && setCvActionModal({ ...cvActionModal, show: false })}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-[420px] bg-white rounded-[50px] shadow-2xl overflow-hidden"
+            >
+              <div className="h-2 bg-yellow-400" />
+              
+              <div className="p-10 space-y-8">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest">
+                    {cvActionModal.type === 'approve' ? 'Phê duyệt' : 
+                     cvActionModal.type === 'reject' ? 'Từ chối' : 'Khôi phục'}
+                  </h3>
+                  <div className="p-2 bg-slate-50 text-slate-300 rounded-xl">
+                    <LogIn size={20} />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">NGƯỜI DUYỆT</label>
+                    <div className="grid grid-cols-1 gap-2">
+                      {REVIEWERS.map(reviewer => (
+                        <button
+                          key={reviewer}
+                          onClick={() => setCvActionModal(prev => ({ ...prev, processedBy: reviewer }))}
+                          className={cn(
+                            "w-full px-5 py-3 rounded-2xl text-xs font-bold transition-all text-left border-2",
+                            cvActionModal.processedBy === reviewer
+                              ? "bg-yellow-50 border-yellow-400 text-amber-950 shadow-sm"
+                              : "bg-white border-slate-100 text-slate-600 hover:bg-slate-50"
+                          )}
+                        >
+                          {reviewer}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {cvActionModal.type === 'restore' && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">MẬT KHẨU ADMIN</label>
+                      <input 
+                        autoFocus
+                        type="password" 
+                        placeholder="••••••" 
+                        value={adminPinInput}
+                        onChange={(e) => setAdminPinInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && confirmCVAction()}
+                        className="w-full px-7 py-4 bg-yellow-50/50 border border-transparent focus:border-yellow-200 outline-none rounded-3xl font-black text-slate-800 transition-all placeholder:text-slate-300" 
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-yellow-50 p-4 rounded-3xl border border-yellow-100 flex items-start gap-3">
+                  <div className="mt-0.5 text-yellow-600">
+                    <AlertCircle size={16} />
+                  </div>
+                  <p className="text-[10px] text-yellow-700 font-bold leading-relaxed">
+                    Lưu ý: Đây là thao tác quản trị hệ thống. Hãy đảm bảo bạn chọn đúng người duyệt.
+                  </p>
+                </div>
+
+                <button 
+                  onClick={confirmCVAction}
+                  disabled={isProcessingAction || (cvActionModal.type === 'restore' && !adminPinInput)}
+                  className="w-full py-5 bg-yellow-400 text-amber-950 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-yellow-300 transition-all shadow-xl shadow-yellow-200 active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
+                >
+                  {isProcessingAction ? 'ĐANG XỬ LÝ...' : 'XÁC NHẬN THỰC HIỆN'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </main>
 
       {/* CV Modal for Students */}

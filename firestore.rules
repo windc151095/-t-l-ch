@@ -57,6 +57,7 @@ service cloud.firestore {
         && data.guidePhoneLast4 is string && data.guidePhoneLast4.size() == 4
         && data.password is string && data.password.size() >= 4 && data.password.size() <= 20
         && (!data.keys().contains('paymentImageUrl') || (data.paymentImageUrl is string && data.paymentImageUrl.size() <= 1500000))
+        && (!data.keys().contains('processedBy') || (data.processedBy is string && data.processedBy.size() <= 200))
         && (request.method == 'create' ? data.status == 'pending' && data.createdAt == request.time : true)
         && (data.status == 'pending' || data.status == 'approved' || data.status == 'rejected');
     }

@@ -72,7 +72,8 @@
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
         "paymentImageUrl": { "type": "string", "description": "Lưu ảnh minh chứng chuyển khoản (Base64 hoặc URL)." },
         "createdAt": { "type": "string", "format": "date-time" },
-        "processedAt": { "type": "string", "format": "date-time" }
+        "processedAt": { "type": "string", "format": "date-time" },
+        "processedBy": { "type": "string", "description": "Người thực hiện phê duyệt/từ chối." }
       },
       "required": ["fullName", "phone", "age", "guideName", "guidePhoneLast4", "password", "status", "createdAt"]
     }
