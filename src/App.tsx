@@ -226,6 +226,12 @@ export default function App() {
     try {
       const settingsRef = doc(db, 'settings', 'global');
       await setDoc(settingsRef, { ...updates, password: '123456' }, { merge: true });
+      if (updates.announcement !== undefined) {
+        setIsAdminMessageVisible(true);
+        alert("Đã lưu thông báo thành công!");
+      } else if (updates.businessHours || updates.slotDuration) {
+        alert("Đã cập nhật khung giờ làm việc chung thành công!");
+      }
     } catch (err) {
       console.error("Settings error:", err);
       handleFirestoreError(err, 'write', 'settings/global');
@@ -598,7 +604,10 @@ export default function App() {
   };
 
   const handleCVSearch = async () => {
-    if (!cvSearchPIN || !cvSearchPhoneLast4) {
+    const searchPIN = cvSearchPIN.trim();
+    const searchPhoneInfo = cvSearchPhoneLast4.trim();
+    
+    if (!searchPIN || !searchPhoneInfo) {
       alert("Vui lòng nhập cả số điện thoại và mã PIN.");
       return;
     }
@@ -606,12 +615,12 @@ export default function App() {
     setFoundCV(null);
     try {
       const q = query(
-        collection(db, 'cvs'), 
-        where('phoneLast4', '==', cvSearchPhoneLast4)
+        collection(db, 'cvs'),
+        where('phoneLast4', '==', searchPhoneInfo)
       );
       const querySnapshot = await getDocs(q);
       
-      const foundDocs = querySnapshot.docs.filter(doc => doc.data().password === cvSearchPIN);
+      const foundDocs = querySnapshot.docs.filter(doc => doc.data().password === searchPIN);
       
       if (foundDocs.length > 0) {
         setFoundCV({ id: foundDocs[0].id, ...foundDocs[0].data() } as CV);
@@ -696,8 +705,8 @@ export default function App() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1024 * 1024) {
-        alert("Kích thước ảnh quá lớn (Phải dưới 1MB). Vui lòng nén ảnh hoặc chụp màn hình thu nhỏ lại.");
+      if (file.size > 500 * 1024) {
+        alert("Kích thước ảnh quá lớn (Phải dưới 500KB để lưu trữ). Vui lòng nén ảnh hoặc chụp màn hình thu nhỏ lại.");
         return;
       }
       const reader = new FileReader();
@@ -737,7 +746,7 @@ export default function App() {
       });
       setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', password: '', paymentImageUrl: '', guideName: '', guidePhoneLast4: '' });
       setCvAutoFillText('');
-      setShowCVModal(false);
+      setCvModalTab('create');
       setShowCVSaveSuccess(true);
     } catch (err) {
       console.error("CV submit error:", err);
@@ -2149,7 +2158,7 @@ export default function App() {
       <AnimatePresence>
         {/* CV Save Success Popup */}
         {showCVSaveSuccess && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <div key="cv-save-success" className="fixed inset-0 z-[120] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2208,7 +2217,7 @@ export default function App() {
 
         {/* Payment Image Popup */}
         {selectedPaymentImage && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div key="payment-image-popup" className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2254,7 +2263,7 @@ export default function App() {
         )}
 
         {showCVModal && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-amber-950/40 backdrop-blur-sm">
+          <div key="cv-modal" className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-amber-950/40 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2485,9 +2494,12 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <span className={cn(
                             "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest",
-                            foundCV.status === 'approved' ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700 animate-pulse"
+                            foundCV.status === 'approved' ? "bg-green-100 text-green-700" : 
+                            foundCV.status === 'rejected' ? "bg-red-100 text-red-700" :
+                            "bg-orange-100 text-orange-700 animate-pulse"
                           )}>
-                            {foundCV.status === 'approved' ? 'Đã phê duyệt' : 'Chờ phê duyệt'}
+                            {foundCV.status === 'approved' ? 'Đã phê duyệt' : 
+                             foundCV.status === 'rejected' ? 'Bị từ chối' : 'Chờ phê duyệt'}
                           </span>
                           <button 
                             onClick={() => exportSingleCV(foundCV)}
@@ -2499,10 +2511,17 @@ export default function App() {
                         </div>
                       </div>
                       
-                      {foundCV.status !== 'approved' && (
+                      {foundCV.status === 'pending' && (
                         <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl text-[10px] text-orange-600 font-bold flex items-center gap-2">
                           <Clock size={12} />
                           <span>Hồ sơ của bạn đang chờ quản trị viên kiểm tra và phê duyệt.</span>
+                        </div>
+                      )}
+                      
+                      {foundCV.status === 'rejected' && (
+                        <div className="bg-red-50 border border-red-100 p-3 rounded-xl text-[10px] text-red-600 font-bold flex items-center gap-2">
+                          <X size={12} />
+                          <span>Hồ sơ của bạn đã bị từ chối. Vui lòng liên hệ quản trị viên để biết thêm chi tiết.</span>
                         </div>
                       )}
 
