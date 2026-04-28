@@ -61,6 +61,7 @@
       "properties": {
         "fullName": { "type": "string" },
         "phone": { "type": "string" },
+        "phoneLast4": { "type": "string", "description": "4 số cuối SĐT học viên" },
         "age": { "type": "string" },
         "address": { "type": "string" },
         "job": { "type": "string" },
@@ -68,9 +69,10 @@
         "guideName": { "type": "string", "description": "Tên hướng dẫn viên" },
         "guidePhoneLast4": { "type": "string", "description": "4 số cuối SĐT của hướng dẫn viên" },
         "password": { "type": "string", "description": "Security PIN for the CV." },
-        "status": { "type": "string", "enum": ["pending", "approved"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
         "paymentImageUrl": { "type": "string", "description": "Lưu ảnh minh chứng chuyển khoản (Base64 hoặc URL)." },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "processedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["fullName", "phone", "age", "guideName", "guidePhoneLast4", "password", "status", "createdAt"]
     }

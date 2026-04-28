@@ -113,9 +113,11 @@ interface CV {
   guideName: string;
   guidePhoneLast4: string;
   password: string; // Protecting with PIN
-  status: 'pending' | 'approved';
+  status: 'pending' | 'approved' | 'rejected';
+  phoneLast4: string;
   paymentImageUrl?: string;
   createdAt: any;
+  processedAt?: any;
 }
 
 // --- Constants ---
@@ -148,12 +150,13 @@ export default function App() {
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
   const [activeAdminTab, setActiveAdminTab] = useState<'config' | 'appointments' | 'cancelled' | 'cvs'>('appointments');
-  const [cvFilter, setCvFilter] = useState<'all' | 'pending' | 'approved'>('all');
+  const [cvFilter, setCvFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [selectedPaymentImage, setSelectedPaymentImage] = useState<string | null>(null);
   const [cvs, setCvs] = useState<CV[]>([]);
   const [showCVModal, setShowCVModal] = useState(false);
   const [cvModalTab, setCvModalTab] = useState<'search' | 'create'>('create');
   const [cvSearchPIN, setCvSearchPIN] = useState('');
+  const [cvSearchPhoneLast4, setCvSearchPhoneLast4] = useState('');
   const [foundCV, setFoundCV] = useState<CV | null>(null);
   const [isSearchingCV, setIsSearchingCV] = useState(false);
   const [isSubmittingCV, setIsSubmittingCV] = useState(false);
@@ -580,16 +583,24 @@ export default function App() {
   };
 
   const handleCVSearch = async () => {
-    if (!cvSearchPIN) return;
+    if (!cvSearchPIN || !cvSearchPhoneLast4) {
+      alert("Vui lòng nhập cả số điện thoại và mã PIN.");
+      return;
+    }
     setIsSearchingCV(true);
     setFoundCV(null);
     try {
-      const q = query(collection(db, 'cvs'), where('password', '==', cvSearchPIN), limit(1));
+      const q = query(
+        collection(db, 'cvs'), 
+        where('password', '==', cvSearchPIN), 
+        where('phoneLast4', '==', cvSearchPhoneLast4),
+        limit(1)
+      );
       const querySnapshot = await getDocs(q);
       if (!querySnapshot.empty) {
         setFoundCV({ id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as CV);
       } else {
-        alert("Không tìm thấy CV với mã PIN này.");
+        alert("Không tìm thấy CV hợp lệ. Vui lòng kiểm tra lại 4 số cuối SĐT và mã PIN.");
       }
     } catch (err) {
       console.error("CV search error:", err);
@@ -691,14 +702,20 @@ export default function App() {
       alert("Vui lòng điền đầy đủ các trường bắt buộc (1, 2, 3, 7, 8).");
       return;
     }
+    if (cvFormData.phone.replace(/\D/g, '').length < 4) {
+      alert("Số điện thoại học viên phải có ít nhất 4 chữ số.");
+      return;
+    }
     if (cvFormData.guidePhoneLast4.length !== 4) {
       alert("Trường số 8 phải là đúng 4 số cuối của SĐT.");
       return;
     }
     setIsSubmittingCV(true);
     try {
+      const phoneLast4 = cvFormData.phone.replace(/\D/g, '').slice(-4);
       await addDoc(collection(db, 'cvs'), {
         ...cvFormData,
+        phoneLast4,
         status: 'pending',
         createdAt: serverTimestamp()
       });
@@ -709,6 +726,7 @@ export default function App() {
     } catch (err) {
       console.error("CV submit error:", err);
       handleFirestoreError(err, 'create', 'cvs');
+      alert("Lỗi khi lưu hồ sơ. Vui lòng thử lại.");
     } finally {
       setIsSubmittingCV(false);
     }
@@ -716,15 +734,24 @@ export default function App() {
 
   const handleApproveCV = async (cvId: string, currentStatus: string) => {
     if (!isAdmin) return;
+    
+    const actionLabel = currentStatus === 'approved' ? 'bỏ duyệt' : 'phê duyệt';
+    const password = prompt(`Để ${actionLabel} hồ sơ, vui lòng nhập mật khẩu quản trị:`);
+    if (password !== '123456') {
+      if (password !== null) alert("Mật khẩu không chính xác!");
+      return;
+    }
+
+    if (!confirm(`Bạn có chắc chắn muốn ${actionLabel} hồ sơ này?`)) return;
+
     const newStatus = currentStatus === 'approved' ? 'pending' : 'approved';
     try {
       await updateDoc(doc(db, 'cvs', cvId), { 
         status: newStatus,
+        processedAt: serverTimestamp(),
         adminAuth: '123456'
       });
-      if (newStatus === 'approved') {
-        alert("Phê duyệt hồ sơ thành công!");
-      }
+      alert(`Đã ${newStatus === 'approved' ? 'phê duyệt' : 'bỏ duyệt'} hồ sơ thành công!`);
     } catch (err) {
       console.error("Approve CV error:", err);
       handleFirestoreError(err, 'update', `cvs/${cvId}`);
@@ -732,38 +759,60 @@ export default function App() {
   };
 
   const handleDeleteCV = async (cvId: string) => {
-    if (!isAdmin || !confirm("Bạn có chắc chắn muốn xóa CV này?")) return;
+    if (!isAdmin) return;
+    
+    const password = prompt("Để từ chối hồ sơ, vui lòng nhập mật khẩu quản trị:");
+    if (password !== '123456') {
+      if (password !== null) alert("Mật khẩu không chính xác!");
+      return;
+    }
+
+    if (!confirm("Bạn có chắc chắn muốn từ chối hồ sơ này?")) return;
     try {
-      await deleteDoc(doc(db, 'cvs', cvId));
+      await updateDoc(doc(db, 'cvs', cvId), {
+        status: 'rejected',
+        processedAt: serverTimestamp(),
+        adminAuth: '123456'
+      });
+      alert("Đã từ chối hồ sơ thành công!");
     } catch (err) {
       console.error("Delete CV error:", err);
-      handleFirestoreError(err, 'delete', `cvs/${cvId}`);
+      handleFirestoreError(err, 'update', `cvs/${cvId}`);
     }
   };
 
   const exportCVsToExcel = async () => {
     const { utils, writeFile } = await import('xlsx');
     
-    // Sort CVs for export: Approved ones first, then by name
-    const exportData = cvs.map(cv => ({
+    const formatCVData = (items: CV[]) => items.map((cv, index) => ({
+      'STT': index + 1,
+      'Ngày tham gia': cv.createdAt ? format(cv.createdAt.toDate(), 'dd/MM/yyyy HH:mm') : '',
+      'Số điện thoại': cv.phone,
       'Họ tên': cv.fullName,
-      'Điện thoại': cv.phone,
       'Tuổi': cv.age,
-      'Địa Chỉ': cv.address,
-      'Công Việc': cv.job,
-      'Mong muốn': cv.target,
-      'Tên HDV': cv.guideName,
-      'SĐT HDV (4 số cuối)': cv.guidePhoneLast4,
-      'Trạng thái': cv.status === 'approved' ? 'Đã phê duyệt' : 'Chờ phê duyệt',
-      'Ngày tạo': cv.createdAt ? format(cv.createdAt.toDate(), 'dd/MM/yyyy HH:mm') : ''
+      'Tên hướng dẫn viên': cv.guideName,
+      'Ngày admin xử lý': cv.processedAt ? format(cv.processedAt.toDate(), 'dd/MM/yyyy HH:mm') : (cv.status === 'pending' ? 'Chưa xử lý' : 'N/A')
     }));
 
-    const worksheet = utils.json_to_sheet(exportData);
     const workbook = utils.book_new();
-    utils.book_append_sheet(workbook, worksheet, 'Danh sách CV');
+
+    // Sheet 1: Tất cả
+    const allData = formatCVData(cvs);
+    utils.book_append_sheet(workbook, utils.json_to_sheet(allData), 'Tất cả');
+
+    // Sheet 2: Chờ phê duyệt
+    const pendingData = formatCVData(cvs.filter(c => c.status === 'pending'));
+    utils.book_append_sheet(workbook, utils.json_to_sheet(pendingData), 'Chờ phê duyệt');
+
+    // Sheet 3: Đã phê duyệt
+    const approvedData = formatCVData(cvs.filter(c => c.status === 'approved'));
+    utils.book_append_sheet(workbook, utils.json_to_sheet(approvedData), 'Đã phê duyệt');
+
+    // Sheet 4: Từ chối
+    const rejectedData = formatCVData(cvs.filter(c => c.status === 'rejected'));
+    utils.book_append_sheet(workbook, utils.json_to_sheet(rejectedData), 'Từ chối');
     
-    // Generate filename with current date
-    const filename = `Danh_Sach_CV_Hoc_Vien_${format(new Date(), 'dd_MM_yyyy')}.xlsx`;
+    const filename = `Bao_Cao_CV_Hoc_Vien_${format(new Date(), 'dd_MM_yyyy')}.xlsx`;
     writeFile(workbook, filename);
   };
 
@@ -789,8 +838,15 @@ export default function App() {
   const login = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    } catch (err: any) {
+      // Suppress the error if the user closed the popup manually
+      if (err.code === 'auth/popup-closed-by-user') {
+        return;
+      }
+      
       console.error("Login error:", err);
+      // Only show alert for other types of errors
+      alert("Đã có lỗi xảy ra khi đăng nhập: " + (err.message || "Vui lòng thử lại sau."));
     }
   };
 
@@ -1854,6 +1910,7 @@ export default function App() {
                         { id: 'all', label: 'Tất cả CV' },
                         { id: 'pending', label: 'Chờ phê duyệt' },
                         { id: 'approved', label: 'Đã phê duyệt' },
+                        { id: 'rejected', label: 'Bị từ chối' },
                       ].map(tab => (
                         <button
                           key={tab.id}
@@ -1906,6 +1963,7 @@ export default function App() {
                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
                                  <p className="text-xs font-bold text-blue-600 truncate">{cv.guideName}</p>
                                  <p className="text-[9px] font-medium text-slate-400 italic">SĐT: ...{cv.guidePhoneLast4}</p>
+                                 <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">Mã PIN: {cv.password}</p>
                                </div>
                                <div className="flex items-center gap-2">
                                  {cv.paymentImageUrl && (
@@ -1928,9 +1986,9 @@ export default function App() {
                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Trạng thái</p>
                                  <p className={cn(
                                    "text-[10px] font-black uppercase tracking-wider",
-                                   cv.status === 'approved' ? "text-green-600" : "text-orange-600"
+                                   cv.status === 'approved' ? "text-green-600" : (cv.status === 'rejected' ? "text-red-600" : "text-orange-600")
                                  )}>
-                                   {cv.status === 'approved' ? '✓ Đã duyệt' : '● Chờ duyệt'}
+                                   {cv.status === 'approved' ? '✓ Đã duyệt' : (cv.status === 'rejected' ? '✕ Từ chối' : '● Chờ duyệt')}
                                  </p>
                                </div>
                                
@@ -1940,19 +1998,21 @@ export default function App() {
                                   "px-6 py-2.5 rounded-2xl font-black text-[10px] transition-all uppercase tracking-widest flex items-center gap-2",
                                   cv.status === 'approved' 
                                     ? "bg-green-100 text-green-700 border border-green-200 hover:bg-green-200" 
-                                    : "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-100 hover:bg-yellow-300 active:scale-95"
+                                    : "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-100 hover:bg-yellow-300 active:scale-95",
+                                  cv.status === 'rejected' && "opacity-50 grayscale pointer-events-none"
                                 )}
                                >
                                 {cv.status === 'approved' ? <CheckCircle2 size={14} /> : null}
                                 {cv.status === 'approved' ? 'Bỏ duyệt' : 'Phê duyệt'}
                                </button>
-                               <button 
-                                onClick={() => handleDeleteCV(cv.id)}
-                                title="Xóa hồ sơ"
-                                className="p-2.5 text-slate-300 hover:text-white hover:bg-red-500 rounded-xl transition-all border border-slate-100 hover:border-red-500 shadow-sm"
-                               >
-                                <Trash2 size={18} />
-                               </button>
+                               {cv.status !== 'rejected' && (
+                                 <button 
+                                  onClick={() => handleDeleteCV(cv.id)}
+                                  className="px-4 py-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl font-black text-[10px] transition-all uppercase tracking-widest border border-slate-100 hover:border-red-100"
+                                 >
+                                  Từ chối
+                                 </button>
+                               )}
                             </div>
                           </div>
                         ))
@@ -2033,6 +2093,7 @@ export default function App() {
                     setShowCVModal(false);
                     setFoundCV(null);
                     setCvSearchPIN('');
+                    setCvSearchPhoneLast4('');
                   }} 
                   className="p-3 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-2xl transition-colors"
                 >
@@ -2050,6 +2111,8 @@ export default function App() {
                     onClick={() => {
                       setCvModalTab(tab.id as any);
                       setFoundCV(null);
+                      setCvSearchPIN('');
+                      setCvSearchPhoneLast4('');
                     }}
                     className={cn(
                       "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all",
@@ -2201,16 +2264,39 @@ export default function App() {
               ) : (
                 <div className="space-y-8">
                   <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1 text-center block">Nhập mã PIN CV để xem thông tin</label>
-                    <div className="flex gap-2">
-                      <input type="password" placeholder="Nhập mã PIN của bạn" 
-                        value={cvSearchPIN} onChange={(e) => setCvSearchPIN(e.target.value)}
-                        className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest text-center" />
-                      <button onClick={handleCVSearch} disabled={isSearchingCV}
-                        className="px-8 bg-yellow-400 text-amber-950 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-yellow-300 transition-all shadow-lg active:scale-95 disabled:opacity-50">
-                        {isSearchingCV ? '...' : 'Tìm'}
-                      </button>
+                    <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-[10px] text-blue-600 font-bold text-center leading-relaxed mb-4">
+                      Vui lòng nhập đúng 4 số cuối số điện thoại và mã PIN bạn đã tạo khi nộp hồ sơ để xem trạng thái.
                     </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">4 số cuối SĐT của bạn</label>
+                        <input 
+                          type="text" 
+                          maxLength={4}
+                          placeholder="Ví dụ: 1234" 
+                          value={cvSearchPhoneLast4} 
+                          onChange={(e) => setCvSearchPhoneLast4(e.target.value)}
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest text-center" 
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN CV</label>
+                        <input 
+                          type="password" 
+                          placeholder="Nhập mã PIN của bạn" 
+                          value={cvSearchPIN} 
+                          onChange={(e) => setCvSearchPIN(e.target.value)}
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest text-center" 
+                        />
+                      </div>
+                    </div>
+
+                    <button onClick={handleCVSearch} disabled={isSearchingCV}
+                      className="w-full py-4 bg-yellow-400 text-amber-950 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-yellow-300 transition-all shadow-lg active:scale-95 disabled:opacity-50">
+                      {isSearchingCV ? 'Đang tìm kiếm...' : 'Kiểm tra trạng thái hồ sơ'}
+                    </button>
                   </div>
 
                   {foundCV && (
@@ -2631,20 +2717,20 @@ export default function App() {
                             setSelectedDate(day);
                             setShowCalendarPicker(false);
                             setSelectedSlot(null);
+                            setCurrentMonth(startOfMonth(day));
                           }}
                           className={cn(
                             "h-10 rounded-xl flex items-center justify-center text-xs font-bold transition-all relative overflow-hidden",
                             isSelected 
                               ? "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-100 z-10 scale-110" 
-                              : isPastDay
-                                ? "text-slate-300 hover:bg-slate-50"
-                                : "text-slate-600 hover:bg-yellow-50 hover:text-yellow-700"
+                              : isTodayDate
+                                ? "bg-slate-50 text-yellow-600 border-2 border-yellow-400"
+                                : isPastDay
+                                  ? "text-slate-300 hover:bg-slate-50"
+                                  : "text-slate-600 hover:bg-yellow-50 hover:text-yellow-700"
                           )}
                         >
                           {format(day, 'd')}
-                          {isTodayDate && (
-                            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-yellow-600" />
-                          )}
                         </button>
                       );
                     });
@@ -2655,7 +2741,9 @@ export default function App() {
               <div className="mt-10">
                 <button 
                   onClick={() => {
-                    setSelectedDate(new Date());
+                    const today = new Date();
+                    setSelectedDate(startOfDay(today));
+                    setCurrentMonth(startOfMonth(today));
                     setShowCalendarPicker(false);
                     setSelectedSlot(null);
                   }}
