@@ -166,6 +166,7 @@ export default function App() {
   const [foundCV, setFoundCV] = useState<CV | null>(null);
   const [isSearchingCV, setIsSearchingCV] = useState(false);
   const [isSubmittingCV, setIsSubmittingCV] = useState(false);
+  const [showCVSaveSuccess, setShowCVSaveSuccess] = useState(false);
   const [cvFormData, setCvFormData] = useState({
     fullName: '',
     phone: '',
@@ -606,13 +607,14 @@ export default function App() {
     try {
       const q = query(
         collection(db, 'cvs'), 
-        where('password', '==', cvSearchPIN), 
-        where('phoneLast4', '==', cvSearchPhoneLast4),
-        limit(1)
+        where('phoneLast4', '==', cvSearchPhoneLast4)
       );
       const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        setFoundCV({ id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as CV);
+      
+      const foundDocs = querySnapshot.docs.filter(doc => doc.data().password === cvSearchPIN);
+      
+      if (foundDocs.length > 0) {
+        setFoundCV({ id: foundDocs[0].id, ...foundDocs[0].data() } as CV);
       } else {
         alert("Không tìm thấy CV hợp lệ. Vui lòng kiểm tra lại 4 số cuối SĐT và mã PIN.");
       }
@@ -733,10 +735,10 @@ export default function App() {
         status: 'pending',
         createdAt: serverTimestamp()
       });
-      alert("Đã tạo CV thành công! Vui lòng chờ quản trị viên phê duyệt.");
       setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', password: '', paymentImageUrl: '', guideName: '', guidePhoneLast4: '' });
       setCvAutoFillText('');
       setShowCVModal(false);
+      setShowCVSaveSuccess(true);
     } catch (err) {
       console.error("CV submit error:", err);
       handleFirestoreError(err, 'create', 'cvs');
@@ -2145,6 +2147,65 @@ export default function App() {
 
       {/* CV Modal for Students */}
       <AnimatePresence>
+        {/* CV Save Success Popup */}
+        {showCVSaveSuccess && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCVSaveSuccess(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[40px] pt-12 pb-10 px-8 lg:px-12 w-[calc(100vw-2rem)] max-w-md shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-green-500" />
+              
+              <div className="flex items-center justify-between mb-10">
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest">THÀNH CÔNG</h3>
+                <button 
+                  onClick={() => setShowCVSaveSuccess(false)}
+                  className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex flex-col items-center text-center space-y-4 py-4">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-500 mb-2">
+                    <Check size={32} strokeWidth={3} />
+                  </div>
+                  <h4 className="text-lg font-bold text-slate-800">Đã tạo CV thành công!</h4>
+                  <p className="text-sm font-medium text-slate-600">
+                    Hồ sơ của bạn đã được gửi đi. Vui lòng chờ bộ phận quản lý phê duyệt.
+                  </p>
+                </div>
+
+                <div className="bg-yellow-50 p-4 rounded-3xl border border-yellow-100 flex items-start gap-3">
+                  <div className="p-1 max-w-fit bg-yellow-200/50 rounded-lg text-yellow-700">
+                    <AlertCircle size={16} />
+                  </div>
+                  <p className="text-[10px] text-yellow-700 font-bold leading-relaxed">
+                    Lưu ý: Sử dụng tính năng "Tra cứu CV" với 4 số cuối điện thoại và mã PIN để kiểm tra trạng thái phê duyệt.
+                  </p>
+                </div>
+
+                <button 
+                  onClick={() => setShowCVSaveSuccess(false)}
+                  className="w-full py-5 bg-green-500 text-white rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-green-600 transition-all shadow-xl shadow-green-200 active:scale-[0.98]"
+                >
+                  ĐÃ HIỂU VÀ ĐÓNG
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {/* Payment Image Popup */}
         {selectedPaymentImage && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
