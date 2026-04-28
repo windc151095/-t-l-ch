@@ -714,13 +714,53 @@ export default function App() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 500 * 1024) {
-        setChromeAlert("Kích thước ảnh quá lớn (Phải dưới 500KB để lưu trữ). Vui lòng nén ảnh hoặc chụp màn hình thu nhỏ lại.");
-        return;
+      if (!file.type.startsWith('image/')) {
+         setChromeAlert("Vui lòng tải lên định dạng ảnh.");
+         return;
       }
+      
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setCvFormData(prev => ({ ...prev, paymentImageUrl: reader.result as string }));
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          const MAX_DIMENSION = 800; // Resize to max 800px
+          
+          if (width > height) {
+            if (width > MAX_DIMENSION) {
+              height = Math.round(height * (MAX_DIMENSION / width));
+              width = MAX_DIMENSION;
+            }
+          } else {
+            if (height > MAX_DIMENSION) {
+              width = Math.round(width * (MAX_DIMENSION / height));
+              height = MAX_DIMENSION;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Convert to base64 with jpeg format and 0.6 quality (60%)
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+            
+            // Limit to 1MB to be safe for Firestore 1MB max document limit
+            const sizeInKB = Math.round((compressedDataUrl.length - 22) * 3 / 4 / 1024);
+            if (sizeInKB > 900) {
+              setChromeAlert("Ảnh vẫn quá lớn sau khi nén tự động. Vui lòng thử ảnh hoặc chọn loại ảnh khác.");
+              return;
+            }
+            
+            setCvFormData(prev => ({ ...prev, paymentImageUrl: compressedDataUrl }));
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
