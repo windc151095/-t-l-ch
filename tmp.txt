@@ -1,0 +1,22 @@
+171:  const [chromeAlert, setChromeAlert] = useState<string | null>(null);
+233:        setChromeAlert("Đã lưu thông báo thành công!");
+235:        setChromeAlert("Đã cập nhật khung giờ làm việc chung thành công!");
+286:      setChromeAlert("Sai tài khoản hoặc mật khẩu!");
+531:      setChromeAlert("Đã có lỗi xảy ra. Vui lòng kiểm tra lại thông tin. (Mã PIN tối thiểu 4 ký tự)");
+577:          setChromeAlert("Vui lòng nhập Mã PIN!");
+584:          setChromeAlert("Sai Mã PIN! Vui lòng kiểm tra lại.");
+601:        setChromeAlert("Có lỗi xảy ra. Vui lòng liên hệ quản trị viên.");
+613:      setChromeAlert("Vui lòng nhập cả số điện thoại và mã PIN.");
+637:        setChromeAlert("Thông tin 4 số điện thoại và mã pin không chính xác.");
+641:      setChromeAlert("Có lỗi xảy ra. Vui lòng thử lại sau.");
+718:        setChromeAlert("Kích thước ảnh quá lớn (Phải dưới 500KB để lưu trữ). Vui lòng nén ảnh hoặc chụp màn hình thu nhỏ lại.");
+732:      setChromeAlert("Mã PIN phải tối thiểu 4 ký tự.");
+738:      setChromeAlert("Vui lòng điền đầy đủ các trường bắt buộc (1, 2, 3, 7, 8).");
+742:      setChromeAlert("Số điện thoại học viên phải có ít nhất 4 chữ số.");
+746:      setChromeAlert("Trường số 8 phải là đúng 4 số cuối của SĐT.");
+769:      setChromeAlert("Lỗi khi lưu hồ sơ. Vui lòng thử lại.");
+807:      setChromeAlert("Mật khẩu quản trị không chính xác!");
+894:      setChromeAlert("Đã có lỗi xảy ra khi đăng nhập: " + (err.message || "Vui lòng thử lại sau."));
+2181:              onClick={() => setChromeAlert(null)}
+2195:                  onClick={() => setChromeAlert(null)}
+2213:                  onClick={() => setChromeAlert(null)}

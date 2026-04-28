@@ -52,7 +52,8 @@ import {
   Search,
   Image as ImageIcon,
   Upload,
-  Eye
+  Eye,
+  AlertCircle
 } from 'lucide-react';
 import { 
   collection, 
@@ -167,6 +168,7 @@ export default function App() {
   const [isSearchingCV, setIsSearchingCV] = useState(false);
   const [isSubmittingCV, setIsSubmittingCV] = useState(false);
   const [showCVSaveSuccess, setShowCVSaveSuccess] = useState(false);
+  const [chromeAlert, setChromeAlert] = useState<string | null>(null);
   const [cvFormData, setCvFormData] = useState({
     fullName: '',
     phone: '',
@@ -228,9 +230,9 @@ export default function App() {
       await setDoc(settingsRef, { ...updates, password: '123456' }, { merge: true });
       if (updates.announcement !== undefined) {
         setIsAdminMessageVisible(true);
-        alert("Đã lưu thông báo thành công!");
+        setChromeAlert("Đã lưu thông báo thành công!");
       } else if (updates.businessHours || updates.slotDuration) {
-        alert("Đã cập nhật khung giờ làm việc chung thành công!");
+        setChromeAlert("Đã cập nhật khung giờ làm việc chung thành công!");
       }
     } catch (err) {
       console.error("Settings error:", err);
@@ -281,7 +283,7 @@ export default function App() {
       setAdminLogin({ user: '', pass: '' });
       setView('admin');
     } else {
-      alert("Sai tài khoản hoặc mật khẩu!");
+      setChromeAlert("Sai tài khoản hoặc mật khẩu!");
     }
   };
 
@@ -526,7 +528,7 @@ export default function App() {
       if (err instanceof Error && err.name === 'FirebaseError' && (err as any).code === 'permission-denied') {
         handleFirestoreError(err, 'create', 'appointments');
       }
-      alert("Đã có lỗi xảy ra. Vui lòng kiểm tra lại thông tin. (Mã PIN tối thiểu 4 ký tự)");
+      setChromeAlert("Đã có lỗi xảy ra. Vui lòng kiểm tra lại thông tin. (Mã PIN tối thiểu 4 ký tự)");
     } finally {
       setIsBooking(false);
     }
@@ -572,14 +574,14 @@ export default function App() {
       } else {
         // Strict PIN Verification
         if (!managePassword) {
-          alert("Vui lòng nhập Mã PIN!");
+          setChromeAlert("Vui lòng nhập Mã PIN!");
           setIsManaging(false);
           return;
         }
 
         const storedPassword = (manageAppointment as any).password;
         if (managePassword.trim() !== String(storedPassword).trim()) {
-          alert("Sai Mã PIN! Vui lòng kiểm tra lại.");
+          setChromeAlert("Sai Mã PIN! Vui lòng kiểm tra lại.");
           setIsManaging(false);
           return;
         }
@@ -596,7 +598,7 @@ export default function App() {
     } catch (err) {
       console.error("Cancel error:", err);
       if (!(err instanceof Error) || !err.message.startsWith('{')) {
-        alert("Có lỗi xảy ra. Vui lòng liên hệ quản trị viên.");
+        setChromeAlert("Có lỗi xảy ra. Vui lòng liên hệ quản trị viên.");
       }
     } finally {
       setIsManaging(false);
@@ -608,28 +610,35 @@ export default function App() {
     const searchPhoneInfo = cvSearchPhoneLast4.trim();
     
     if (!searchPIN || !searchPhoneInfo) {
-      alert("Vui lòng nhập cả số điện thoại và mã PIN.");
+      setChromeAlert("Vui lòng nhập cả số điện thoại và mã PIN.");
       return;
     }
     setIsSearchingCV(true);
     setFoundCV(null);
     try {
-      const q = query(
-        collection(db, 'cvs'),
-        where('phoneLast4', '==', searchPhoneInfo)
-      );
+      const q = query(collection(db, 'cvs'));
       const querySnapshot = await getDocs(q);
       
-      const foundDocs = querySnapshot.docs.filter(doc => doc.data().password === searchPIN);
+      const foundDocs = querySnapshot.docs.filter(doc => {
+        const data = doc.data();
+        const dbPhone = data.phone ? String(data.phone).replace(/\D/g, '') : '';
+        const dbPhoneLast4 = data.phoneLast4 ? String(data.phoneLast4).trim() : '';
+        const dbGuidePhoneLast4 = data.guidePhoneLast4 ? String(data.guidePhoneLast4).trim() : '';
+        const dbPin = data.password ? String(data.password).trim() : '';
+        
+        const matchesPhone = dbPhoneLast4 === searchPhoneInfo || (dbPhone.length >= 4 && dbPhone.endsWith(searchPhoneInfo)) || dbGuidePhoneLast4 === searchPhoneInfo;
+        console.log("Checking CV:", data.fullName, "dbPhoneLast4:", dbPhoneLast4, "searchPhoneInfo:", searchPhoneInfo, "dbPin:", dbPin, "searchPIN:", searchPIN, "matchesPhone:", matchesPhone);
+        return matchesPhone && dbPin === searchPIN;
+      });
       
       if (foundDocs.length > 0) {
         setFoundCV({ id: foundDocs[0].id, ...foundDocs[0].data() } as CV);
       } else {
-        alert("Không tìm thấy CV hợp lệ. Vui lòng kiểm tra lại 4 số cuối SĐT và mã PIN.");
+        setChromeAlert("Thông tin 4 số điện thoại và mã pin không chính xác.");
       }
     } catch (err) {
       console.error("CV search error:", err);
-      handleFirestoreError(err, 'list', 'cvs');
+      setChromeAlert("Có lỗi xảy ra. Vui lòng thử lại sau.");
     } finally {
       setIsSearchingCV(false);
     }
@@ -706,7 +715,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 500 * 1024) {
-        alert("Kích thước ảnh quá lớn (Phải dưới 500KB để lưu trữ). Vui lòng nén ảnh hoặc chụp màn hình thu nhỏ lại.");
+        setChromeAlert("Kích thước ảnh quá lớn (Phải dưới 500KB để lưu trữ). Vui lòng nén ảnh hoặc chụp màn hình thu nhỏ lại.");
         return;
       }
       const reader = new FileReader();
@@ -719,27 +728,33 @@ export default function App() {
 
   const handleCVSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (cvFormData.password.length < 4) {
-      alert("Mã PIN phải tối thiểu 4 ký tự.");
+    if (cvFormData.password.trim().length < 4) {
+      setChromeAlert("Mã PIN phải tối thiểu 4 ký tự.");
       return;
     }
-    if (!cvFormData.fullName || !cvFormData.phone || !cvFormData.age || !cvFormData.guideName || !cvFormData.guidePhoneLast4) {
-      alert("Vui lòng điền đầy đủ các trường bắt buộc (1, 2, 3, 7, 8).");
+    const safeFullName = cvFormData.fullName.trim();
+    const safePhone = cvFormData.phone.trim();
+    if (!safeFullName || !safePhone || !cvFormData.age || !cvFormData.guideName || !cvFormData.guidePhoneLast4) {
+      setChromeAlert("Vui lòng điền đầy đủ các trường bắt buộc (1, 2, 3, 7, 8).");
       return;
     }
-    if (cvFormData.phone.replace(/\D/g, '').length < 4) {
-      alert("Số điện thoại học viên phải có ít nhất 4 chữ số.");
+    if (safePhone.replace(/\D/g, '').length < 4) {
+      setChromeAlert("Số điện thoại học viên phải có ít nhất 4 chữ số.");
       return;
     }
-    if (cvFormData.guidePhoneLast4.length !== 4) {
-      alert("Trường số 8 phải là đúng 4 số cuối của SĐT.");
+    if (cvFormData.guidePhoneLast4.trim().length !== 4) {
+      setChromeAlert("Trường số 8 phải là đúng 4 số cuối của SĐT.");
       return;
     }
     setIsSubmittingCV(true);
     try {
-      const phoneLast4 = cvFormData.phone.replace(/\D/g, '').slice(-4);
+      const phoneLast4 = safePhone.replace(/\D/g, '').slice(-4);
       await addDoc(collection(db, 'cvs'), {
         ...cvFormData,
+        fullName: safeFullName,
+        phone: safePhone,
+        password: cvFormData.password.trim(),
+        guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
         phoneLast4,
         status: 'pending',
         createdAt: serverTimestamp()
@@ -751,7 +766,7 @@ export default function App() {
     } catch (err) {
       console.error("CV submit error:", err);
       handleFirestoreError(err, 'create', 'cvs');
-      alert("Lỗi khi lưu hồ sơ. Vui lòng thử lại.");
+      setChromeAlert("Lỗi khi lưu hồ sơ. Vui lòng thử lại.");
     } finally {
       setIsSubmittingCV(false);
     }
@@ -764,7 +779,12 @@ export default function App() {
     } else {
       if (!isAdmin) return;
       
-      const selectedReviewer = localReviewers[cvId] || REVIEWERS[0];
+      const selectedReviewer = localReviewers[cvId] || '';
+      if (!selectedReviewer) {
+        setChromeAlert("Vui lòng chọn Người duyệt trước khi thực hiện.");
+        return;
+      }
+      
       setIsProcessingAction(true);
       try {
         const newStatus: CV['status'] = type === 'approve' ? 'approved' : 'rejected';
@@ -789,7 +809,7 @@ export default function App() {
     
     // modal is only used for restore now
     if (adminPinInput !== '123456') {
-      alert("Mật khẩu quản trị không chính xác!");
+      setChromeAlert("Mật khẩu quản trị không chính xác!");
       return;
     }
 
@@ -876,7 +896,7 @@ export default function App() {
       
       console.error("Login error:", err);
       // Only show alert for other types of errors
-      alert("Đã có lỗi xảy ra khi đăng nhập: " + (err.message || "Vui lòng thử lại sau."));
+      setChromeAlert("Đã có lỗi xảy ra khi đăng nhập: " + (err.message || "Vui lòng thử lại sau."));
     }
   };
 
@@ -2014,9 +2034,10 @@ export default function App() {
                                  {cv.status === 'pending' ? (
                                    <select
                                      className="text-[10px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400 transition-colors cursor-pointer uppercase tracking-wide"
-                                     value={localReviewers[cv.id] || REVIEWERS[0]}
+                                     value={localReviewers[cv.id] || ''}
                                      onChange={(e) => setLocalReviewers(prev => ({ ...prev, [cv.id]: e.target.value }))}
                                    >
+                                     <option value="" disabled>CHỌN NGƯỜI DUYỆT</option>
                                      {REVIEWERS.map(r => (
                                        <option key={r} value={r}>{r}</option>
                                      ))}
@@ -2156,6 +2177,55 @@ export default function App() {
 
       {/* CV Modal for Students */}
       <AnimatePresence>
+        {/* System Chrome Alert Popup */}
+        {chromeAlert && (
+          <div key="chrome-alert" className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setChromeAlert(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[40px] pt-12 pb-10 px-8 lg:px-12 w-[calc(100vw-2rem)] max-w-md shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-red-500" />
+              
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest">THÔNG BÁO</h3>
+                <button 
+                  onClick={() => setChromeAlert(null)}
+                  className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-8">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 flex-shrink-0">
+                    <AlertCircle size={24} strokeWidth={2.5} />
+                  </div>
+                  <p className="text-sm font-medium text-slate-600 leading-relaxed pt-1">
+                    {chromeAlert}
+                  </p>
+                </div>
+                
+                <button 
+                  onClick={() => setChromeAlert(null)}
+                  className="w-full py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {/* CV Save Success Popup */}
         {showCVSaveSuccess && (
           <div key="cv-save-success" className="fixed inset-0 z-[120] flex items-center justify-center p-4">
@@ -2457,7 +2527,7 @@ export default function App() {
                     
                     <div className="grid grid-cols-1 gap-4">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">4 số cuối SĐT của bạn</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">4 số cuối SĐT (của bạn hoặc HDV)</label>
                         <input 
                           type="text" 
                           maxLength={4}
