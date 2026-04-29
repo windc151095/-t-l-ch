@@ -53,8 +53,10 @@ import {
   Image as ImageIcon,
   Upload,
   Eye,
-  AlertCircle,
-  Smartphone
+  Smartphone,
+  List,
+  CircleDollarSign,
+  Copy
 } from 'lucide-react';
 import { 
   collection, 
@@ -166,6 +168,8 @@ export default function App() {
   const [selectedPaymentImage, setSelectedPaymentImage] = useState<string | null>(null);
   const [selectedAppCvIds, setSelectedAppCvIds] = useState<string[]>([]);
   const [isAppApprovalMode, setIsAppApprovalMode] = useState(false);
+  const [selectedDeleteCvIds, setSelectedDeleteCvIds] = useState<string[]>([]);
+  const [isDeleteCvMode, setIsDeleteCvMode] = useState(false);
   const [appRejectReasonInput, setAppRejectReasonInput] = useState('');
   const [cvs, setCvs] = useState<CV[]>([]);
   const [showCVModal, setShowCVModal] = useState(false);
@@ -190,6 +194,23 @@ export default function App() {
     password: '',
     paymentImageUrl: ''
   });
+  const [rolePasswords, setRolePasswords] = useState({ accountant: '', app_approver: '', delete: '' });
+  const [unlockedRoles, setUnlockedRoles] = useState({ accountant: false, app_approver: false, delete: false });
+  const [adminCvTab, setAdminCvTab] = useState<'status' | 'accountant' | 'app_approver' | 'delete'>('status');
+  const [statusSubFilter, setStatusSubFilter] = useState<'all' | 'pending' | 'processing' | 'completed' | 'rejected'>('all');
+  const [showCvTemplateModal, setShowCvTemplateModal] = useState(false);
+
+  const handleCopyTemplate = async () => {
+    const cvTemplate = `CV - ĐĂNG KÝ HỌC TẬP\n........................................\n1. Họ tên:\n2. Điện thoại:\n3. Tuổi:\n4. Địa Chỉ:\n5. Công Việc:\n6. Mong muốn:`;
+    try {
+      await navigator.clipboard.writeText(cvTemplate);
+      setChromeAlert("Đã sao chép mẫu CV!");
+      setShowCvTemplateModal(false);
+    } catch (err) {
+      setChromeAlert("Không thể sao chép. Vui lòng copy thủ công.");
+    }
+  };
+
   const [cvAutoFillText, setCvAutoFillText] = useState('');
   const [now, setNow] = useState(new Date());
   const [overviewTab, setOverviewTab] = useState<'active' | 'past' | 'empty'>('active');
@@ -198,7 +219,7 @@ export default function App() {
   const [cvActionModal, setCvActionModal] = useState<{ 
     show: boolean; 
     cvId: string; 
-    type: 'approve' | 'reject' | 'restore' | 'approveApp' | 'bulkApproveApp' | 'bulkRejectApp' | 'enableAppApprovalMode' | null;
+    type: 'approve' | 'reject' | 'restore' | 'approveApp' | 'bulkApproveApp' | 'bulkRejectApp' | 'enableAppApprovalMode' | 'enableDeleteCvMode' | 'bulkDeleteCv' | null;
   }>({ show: false, cvId: '', type: null });
   const [adminPinInput, setAdminPinInput] = useState('');
   const [isProcessingAction, setIsProcessingAction] = useState(false);
@@ -780,14 +801,27 @@ export default function App() {
     try {
       const phoneLast4 = safePhone.replace(/\D/g, '').slice(-4);
       if (editingCvId) {
-        await updateDoc(doc(db, 'cvs', editingCvId), {
+        const existingCv = cvs.find(c => c.id === editingCvId);
+        let updatedData: any = {
           ...cvFormData,
           fullName: safeFullName,
           phone: safePhone,
           password: cvFormData.password.trim(),
           guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
           phoneLast4
-        });
+        };
+        
+        if (existingCv?.status === 'rejected') {
+          updatedData.status = 'pending';
+          updatedData.cancellationReason = deleteField();
+        }
+        
+        if (existingCv?.appRejectedReason) {
+          updatedData.status = 'approved';
+          updatedData.appRejectedReason = deleteField();
+        }
+
+        await updateDoc(doc(db, 'cvs', editingCvId), updatedData);
       } else {
         await addDoc(collection(db, 'cvs'), {
           ...cvFormData,
@@ -838,9 +872,10 @@ export default function App() {
   };
 
   const handleCVAction = async (cvId: string, type: 'approve' | 'reject' | 'restore' | 'approveApp') => {
-    if (type === 'restore' || type === 'approveApp') {
+    if (type === 'restore' || type === 'approveApp' || type === 'reject') {
       setCvActionModal({ show: true, cvId, type });
       setAdminPinInput('');
+      if (type === 'reject') setAppRejectReasonInput('');
     } else {
       if (!isAdmin) return;
       
@@ -869,19 +904,69 @@ export default function App() {
     }
   };
 
+  const isActionUnlocked = () => {
+    if (!cvActionModal.type) return false;
+    if (cvActionModal.type === 'restore') {
+      const cvToRestore = cvs.find(c => c.id === cvActionModal.cvId);
+      if (cvToRestore?.appRejectedReason) return unlockedRoles.app_approver;
+      return unlockedRoles.accountant;
+    }
+    if (cvActionModal.type === 'approve') return unlockedRoles.accountant;
+    if (cvActionModal.type === 'bulkApproveApp' || cvActionModal.type === 'bulkRejectApp') return unlockedRoles.app_approver;
+    if (cvActionModal.type === 'bulkDeleteCv') return unlockedRoles.delete;
+    return false;
+  };
+
   const confirmCVAction = async () => {
     if (!isAdmin || !cvActionModal.type) return;
+
+    let requiredPin = '123456';
+    if (cvActionModal.type === 'restore') {
+      const cvToRestore = cvs.find(c => c.id === cvActionModal.cvId);
+      if (cvToRestore?.appRejectedReason) {
+        requiredPin = '2222';
+      } else {
+        requiredPin = '1111';
+      }
+    } else if (cvActionModal.type === 'approve') {
+      requiredPin = '1111';
+    } else if (cvActionModal.type === 'bulkApproveApp') {
+      requiredPin = '2222';
+    } else if (cvActionModal.type === 'bulkDeleteCv') {
+      requiredPin = '6868';
+    }
     
     // modal is used for restore and app actions
-    if (cvActionModal.type !== 'bulkRejectApp' && adminPinInput !== '123456') {
-      setChromeAlert("Mật khẩu quản trị không chính xác!");
+    if (cvActionModal.type !== 'bulkRejectApp' && cvActionModal.type !== 'reject' && !isActionUnlocked() && adminPinInput !== requiredPin && adminPinInput !== '123456') {
+      setChromeAlert("Mật khẩu không chính xác!");
       return;
     }
 
     setIsProcessingAction(true);
     try {
-      if (cvActionModal.type === 'enableAppApprovalMode') {
+      if (cvActionModal.type === 'reject' && cvActionModal.cvId) {
+        const selectedReviewer = localReviewers[cvActionModal.cvId] || 'Admin';
+        await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
+          status: 'rejected',
+          cancellationReason: appRejectReasonInput || 'Không đủ điều kiện',
+          processedAt: serverTimestamp(),
+          processedBy: selectedReviewer,
+          adminAuth: '123456'
+        });
+        setAppRejectReasonInput('');
+      } else if (cvActionModal.type === 'enableDeleteCvMode') {
+        setIsDeleteCvMode(true);
+        setIsAppApprovalMode(false);
+        setChromeAlert("Đã bật Chế độ Xóa CV.");
+      } else if (cvActionModal.type === 'bulkDeleteCv') {
+        for (const cvId of selectedDeleteCvIds) {
+          await deleteDoc(doc(db, 'cvs', cvId));
+        }
+        setChromeAlert(`Đã xóa thành công ${selectedDeleteCvIds.length} CV.`);
+        setSelectedDeleteCvIds([]);
+      } else if (cvActionModal.type === 'enableAppApprovalMode') {
         setIsAppApprovalMode(true);
+        setIsDeleteCvMode(false);
         setChromeAlert("Đã bật Chế độ Duyệt App.");
       } else if (cvActionModal.type === 'bulkApproveApp' || cvActionModal.type === 'bulkRejectApp') {
         const isApproving = cvActionModal.type === 'bulkApproveApp';
@@ -918,12 +1003,24 @@ export default function App() {
           setCvFilter('approved');
         }
       } else if (cvActionModal.type === 'restore' && cvActionModal.cvId) {
-        await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
-          status: 'pending',
-          processedAt: serverTimestamp(),
-          processedBy: deleteField(), // clear reviewer on restore
-          adminAuth: '123456'
-        });
+        const cvToRestore = cvs.find(c => c.id === cvActionModal.cvId);
+        
+        if (cvToRestore?.appRejectedReason) {
+          await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
+            status: 'approved',
+            appRejectedReason: deleteField(),
+            processedAt: serverTimestamp(),
+            adminAuth: '123456'
+          });
+        } else {
+          await updateDoc(doc(db, 'cvs', cvActionModal.cvId), {
+            status: 'pending',
+            processedAt: serverTimestamp(),
+            processedBy: deleteField(),
+            cancellationReason: deleteField(),
+            adminAuth: '123456'
+          });
+        }
       }
       
       setCvActionModal({ show: false, cvId: '', type: null });
@@ -933,6 +1030,39 @@ export default function App() {
     } finally {
       setIsProcessingAction(false);
     }
+  };
+
+  const handleRoleUnlock = (role: 'accountant' | 'app_approver' | 'delete') => {
+    const passwords = {
+      accountant: '1111',
+      app_approver: '2222',
+      delete: '6868'
+    };
+    if (rolePasswords[role] === passwords[role]) {
+      setUnlockedRoles(prev => ({ ...prev, [role]: true }));
+      setChromeAlert("Mở khóa thành công!");
+    } else {
+      setChromeAlert("Mật khẩu không chính xác!");
+    }
+  };
+
+  const cvFilterMapping = {
+    pending: (c: CV) => c.status === 'pending',
+    processing: (c: CV) => c.status === 'approved' && !c.appApproved && (!c.appRejectedReason || c.appRejectedReason === ''),
+    completed: (c: CV) => c.status === 'approved' && c.appApproved === true,
+    rejected: (c: CV) => c.status === 'rejected' || (c.appRejectedReason && c.appRejectedReason !== '')
+  };
+
+  const getFilteredCVs = () => {
+    return cvs.filter(c => {
+      // Tab filtering
+      if (statusSubFilter === 'all') return true;
+      if (statusSubFilter === 'pending') return cvFilterMapping.pending(c);
+      if (statusSubFilter === 'processing') return cvFilterMapping.processing(c);
+      if (statusSubFilter === 'completed') return cvFilterMapping.completed(c);
+      if (statusSubFilter === 'rejected') return cvFilterMapping.rejected(c);
+      return true;
+    });
   };
 
   const exportCVsToExcel = async () => {
@@ -2034,7 +2164,7 @@ export default function App() {
 
                 {activeAdminTab === 'cvs' && (
                   <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2 mb-6">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-yellow-100 rounded-2xl flex items-center justify-center text-yellow-600 shadow-sm border border-yellow-200">
                           <FileText size={24} />
@@ -2048,157 +2178,217 @@ export default function App() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {cvFilter === 'approved' && isAppApprovalMode && selectedAppCvIds.length > 0 && isAdmin && (
-                          <>
-                            <button 
-                              onClick={() => setCvActionModal({ show: true, cvId: '', type: 'bulkApproveApp' })}
-                              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition-all shadow-lg uppercase tracking-widest shadow-blue-100"
-                            >
-                              <Check size={16} />
-                              Duyệt App ({selectedAppCvIds.length})
-                            </button>
-                            <button 
-                              onClick={() => setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' })}
-                              className="flex items-center gap-2 px-6 py-2.5 bg-red-100 text-red-600 rounded-xl text-xs font-black hover:bg-red-200 transition-all uppercase tracking-widest border border-red-200"
-                            >
-                              <X size={16} />
-                              Từ chối
-                            </button>
-                          </>
-                        )}
-                        {cvFilter === 'approved' && isAdmin && (
-                          <button 
+                      
+                      <div className="flex items-center gap-2">
+                        {[
+                          { id: 'accountant', label: 'Kế toán', icon: <CircleDollarSign size={18} strokeWidth={2.5} />, activeColor: "text-blue-600 border-blue-200", activeBg: "bg-blue-50/50 border" },
+                          { id: 'app_approver', label: 'Duyệt App', icon: <Smartphone size={18} strokeWidth={2.5} />, activeColor: "text-blue-600 border-blue-200", activeBg: "bg-blue-50/50 border" },
+                          { id: 'delete', label: 'Xóa CV', icon: <Trash2 size={18} strokeWidth={2.5} />, activeColor: "text-red-600 border-red-200", activeBg: "bg-red-50/50 border" }
+                        ].map(tab => (
+                          <button
+                            key={tab.id}
+                            title={tab.label}
                             onClick={() => {
-                              if (isAppApprovalMode) {
-                                setIsAppApprovalMode(false);
-                                setSelectedAppCvIds([]);
-                              } else {
-                                setCvActionModal({ show: true, cvId: '', type: 'enableAppApprovalMode' });
-                              }
+                              setAdminCvTab(adminCvTab === tab.id ? 'status' : tab.id as any);
+                              setSelectedAppCvIds([]);
+                              setSelectedDeleteCvIds([]);
                             }}
                             className={cn(
-                              "flex items-center justify-center p-2.5 rounded-xl transition-all shadow-sm border",
-                              isAppApprovalMode 
-                                ? "bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 shadow-indigo-200"
-                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                              "p-3 flex items-center justify-center rounded-xl transition-all border border-transparent bg-slate-50 shadow-sm",
+                              adminCvTab === tab.id
+                                ? `${tab.activeBg} ${tab.activeColor}`
+                                : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                             )}
-                            title={isAppApprovalMode ? "Tắt Duyệt App" : "Bật Quyền Duyệt App"}
                           >
-                            <Smartphone size={16} strokeWidth={3} />
+                            {tab.icon}
                           </button>
-                        )}
-                        <button 
-                          onClick={exportCVsToExcel}
-                          className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black hover:bg-green-700 transition-all shadow-lg uppercase tracking-widest shadow-green-100"
-                        >
-                          <Download size={16} />
-                          Xuất Excel
-                        </button>
+                        ))}
                       </div>
                     </div>
 
-                    <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-sm sticky top-[4.5rem] z-10">
-                      {[
-                        { id: 'all', label: 'Tất cả CV' },
-                        { id: 'pending', label: 'Chờ phê duyệt' },
-                        { id: 'approved', label: 'Đã phê duyệt' },
-                        { id: 'rejected', label: 'Bị từ chối' },
-                      ].map(tab => (
-                        <button
-                          key={tab.id}
-                          onClick={() => {
-                            setCvFilter(tab.id as any);
-                            setSelectedAppCvIds([]);
-                            setIsAppApprovalMode(false);
-                          }}
-                          className={cn(
-                            "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                            cvFilter === tab.id 
-                              ? "bg-slate-900 text-white shadow-lg" 
-                              : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
-                          )}
-                        >
-                          {tab.label}
-                          {(() => {
-                            const count = tab.id === 'all' ? cvs.length : cvs.filter(c => c.status === tab.id).length;
-                            if (count === 0) return null;
-                            return (
-                              <span className={cn(
-                                "ml-2 px-1.5 py-0.5 rounded-md text-[8px] top-[-1px] relative",
-                                tab.id === 'pending' ? "bg-orange-500 text-white" : 
-                                tab.id === 'approved' ? "bg-green-500 text-white" : 
-                                tab.id === 'rejected' ? "bg-red-500 text-white" :
-                                "bg-slate-200 text-slate-700"
-                              )}>
-                                {count}
-                              </span>
-                            );
-                          })()}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4">
-                      {(() => {
-                        const displayedCvs = cvs.filter(c => 
-                          (cvFilter === 'all' ? true : c.status === cvFilter) && 
-                          (cvFilter === 'approved' && isAppApprovalMode ? (!c.appApproved) : true)
-                        );
-                        
-                        return (
-                          <>
-                            {cvFilter === 'approved' && isAppApprovalMode && displayedCvs.length > 0 && (
-                              <div className="flex items-center gap-3 px-6 py-3 bg-slate-50 rounded-2xl border border-slate-100 mb-2">
-                                <input 
-                                  type="checkbox" 
-                                  className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                  checked={selectedAppCvIds.length === displayedCvs.length && selectedAppCvIds.length > 0}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedAppCvIds(displayedCvs.map(c => c.id));
-                                    } else {
-                                      setSelectedAppCvIds([]);
-                                    }
-                                  }}
-                                />
-                                <span className="text-xs font-black text-slate-600 uppercase tracking-widest">
-                                  Chọn tất cả {displayedCvs.length} CV (Chưa duyệt/Từ chối)
-                                </span>
-                              </div>
+                    <div className="space-y-6">
+                      <div className="flex bg-white p-1.5 rounded-full border border-slate-200 shadow-sm sticky top-[4.5rem] z-10 overflow-x-auto hide-scrollbar">
+                        <div className="flex w-full min-w-max">
+                        {[
+                          { id: 'all', label: 'Tất cả CV' },
+                          { id: 'pending', label: 'Chờ duyệt' },
+                          { id: 'processing', label: 'Đang duyệt' },
+                          { id: 'completed', label: 'Hoàn thành' },
+                          { id: 'rejected', label: 'Từ chối' },
+                        ].map(tab => {
+                          const count = tab.id === 'all' ? cvs.length : cvs.filter(c => cvFilterMapping[tab.id as keyof typeof cvFilterMapping](c)).length;
+                          return (
+                          <button
+                            key={tab.id}
+                            onClick={() => setStatusSubFilter(tab.id as any)}
+                            className={cn(
+                              "flex flex-1 items-center justify-center gap-2 px-6 py-3 rounded-full text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                              statusSubFilter === tab.id 
+                                ? "bg-[#101423] text-white shadow-md" 
+                                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50/50"
                             )}
-                            
-                            {displayedCvs.length === 0 ? (
-                              <div className="py-24 text-center bg-white rounded-[40px] border border-slate-100">
-                                <p className="text-slate-400 font-bold italic text-lg capitalize">
-                                  {cvFilter === 'all' ? 'Chưa có CV nào được tạo' : 
-                                   cvFilter === 'pending' ? 'Không có CV nào đang chờ duyệt' : 'Không có CV nào để hiển thị'}
-                                </p>
-                              </div>
-                            ) : (
-                              displayedCvs.map((cv) => (
-                                <div key={cv.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-start justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden group">
-                                  {/* Status strip */}
-                                  <div className={cn(
-                                    "absolute top-0 left-0 w-1.5 h-full transition-all group-hover:w-2",
-                                    cv.status === 'approved' ? "bg-green-500" : "bg-orange-400 animate-pulse"
-                                  )} />
-                                  
-                                  <div className="flex items-start gap-4 flex-1 w-full">
-                                    {cvFilter === 'approved' && isAppApprovalMode && (
+                          >
+                            <span>{tab.label}</span>
+                            <span className={cn(
+                              "py-0.5 px-2 rounded-full text-[9px] font-bold leading-none",
+                              statusSubFilter === tab.id ? "bg-white/20" : "bg-slate-200/60"
+                            )}>
+                              {count}
+                            </span>
+                          </button>
+                          );
+                        })}
+                        </div>
+                      </div>
+
+                      {adminCvTab !== 'status' && !unlockedRoles[adminCvTab as keyof typeof unlockedRoles] ? (
+                        <div className="bg-white p-12 rounded-[40px] border border-slate-100 text-center shadow-sm max-w-md mx-auto mt-8">
+                          <div className="w-20 h-20 bg-slate-50 flex items-center justify-center rounded-3xl mx-auto mb-6 shadow-inset">
+                            <Lock size={32} className="text-slate-300" />
+                          </div>
+                          <h4 className="font-black text-slate-800 text-lg tracking-tight mb-2 uppercase">Yêu cầu mở khóa</h4>
+                          <p className="text-sm text-slate-500 font-medium mb-8">
+                            Bạn cần cung cấp mật khẩu để truy cập không gian làm việc của {
+                              adminCvTab === 'accountant' ? 'Kế toán' :
+                              adminCvTab === 'app_approver' ? 'Duyệt App' : 'Xóa CV'
+                            }.
+                          </p>
+                          <div className="space-y-4">
+                            <input 
+                              type="password"
+                              placeholder="Nhập mã PIN..."
+                              value={rolePasswords[adminCvTab as 'accountant' | 'app_approver' | 'delete']}
+                              onChange={e => setRolePasswords({ ...rolePasswords, [adminCvTab]: e.target.value })}
+                              onKeyDown={e => e.key === 'Enter' && handleRoleUnlock(adminCvTab as 'accountant' | 'app_approver' | 'delete')}
+                              className="w-full px-6 py-4 bg-slate-50 border border-slate-200 focus:border-blue-400 outline-none rounded-2xl font-bold text-slate-800 text-center tracking-widest shadow-inner transition-all"
+                            />
+                            <button 
+                              onClick={() => handleRoleUnlock(adminCvTab as 'accountant' | 'app_approver' | 'delete')}
+                              disabled={!rolePasswords[adminCvTab as 'accountant' | 'app_approver' | 'delete']}
+                              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50"
+                            >
+                              Mở khóa
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+
+                          {adminCvTab === 'app_approver' && statusSubFilter === 'processing' && (
+                            <div className="flex items-center gap-3">
+                              <button 
+                                onClick={() => setCvActionModal({ show: true, cvId: '', type: 'bulkApproveApp' })}
+                                disabled={selectedAppCvIds.length === 0}
+                                className="flex-1 max-w-xs flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700 transition-all shadow-lg uppercase tracking-widest disabled:opacity-50 disabled:grayscale shadow-blue-100"
+                              >
+                                <Check size={16} />
+                                Duyệt App ({selectedAppCvIds.length})
+                              </button>
+                              <button 
+                                onClick={() => setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' })}
+                                disabled={selectedAppCvIds.length === 0}
+                                className="flex-1 max-w-xs flex items-center justify-center gap-2 px-6 py-3 bg-red-100 text-red-600 rounded-xl text-xs font-black hover:bg-red-200 transition-all uppercase tracking-widest border border-red-200 disabled:opacity-50"
+                              >
+                                <Smartphone size={16} />
+                                Từ chối
+                              </button>
+                            </div>
+                          )}
+                          
+                          {adminCvTab === 'delete' && (
+                            <div className="flex items-center gap-3">
+                              <button 
+                                onClick={() => setCvActionModal({ show: true, cvId: '', type: 'bulkDeleteCv' })}
+                                disabled={selectedDeleteCvIds.length === 0}
+                                className="flex-1 max-w-xs flex items-center justify-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl text-xs font-black hover:bg-red-700 transition-all shadow-lg uppercase tracking-widest disabled:opacity-50 disabled:grayscale shadow-red-100"
+                              >
+                                <Trash2 size={16} />
+                                Khẳng định Xóa vĩnh viễn ({selectedDeleteCvIds.length})
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-1 gap-4">
+                            {(() => {
+                              const displayedCvs = getFilteredCVs();
+                              
+                              return (
+                                <>
+                                  {adminCvTab === 'delete' && displayedCvs.length > 0 && (
+                                    <div className="flex items-center gap-3 px-6 py-3 bg-red-50 rounded-2xl border border-red-100 mb-2">
                                       <input 
                                         type="checkbox" 
-                                        className="w-5 h-5 mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
-                                        checked={selectedAppCvIds.includes(cv.id)}
+                                        className="w-5 h-5 rounded border-red-300 text-red-600 focus:ring-red-500"
+                                        checked={selectedDeleteCvIds.length === displayedCvs.length && selectedDeleteCvIds.length > 0}
                                         onChange={(e) => {
-                                          if (e.target.checked) {
-                                            setSelectedAppCvIds(prev => [...prev, cv.id]);
-                                          } else {
-                                            setSelectedAppCvIds(prev => prev.filter(id => id !== cv.id));
-                                          }
+                                          if (e.target.checked) setSelectedDeleteCvIds(displayedCvs.map(c => c.id));
+                                          else setSelectedDeleteCvIds([]);
                                         }}
                                       />
-                                    )}
+                                      <span className="text-xs font-black text-red-600 uppercase tracking-widest">
+                                        Chọn tất cả {displayedCvs.length} CV (Hoàn thành/Từ chối) để xóa
+                                      </span>
+                                    </div>
+                                  )}
+                                  
+                                  {adminCvTab === 'app_approver' && statusSubFilter === 'processing' && displayedCvs.length > 0 && (
+                                    <div className="flex items-center gap-3 px-6 py-3 bg-slate-50 rounded-2xl border border-slate-100 mb-2">
+                                      <input 
+                                        type="checkbox" 
+                                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        checked={selectedAppCvIds.length === displayedCvs.length && selectedAppCvIds.length > 0}
+                                        onChange={(e) => {
+                                          if (e.target.checked) setSelectedAppCvIds(displayedCvs.map(c => c.id));
+                                          else setSelectedAppCvIds([]);
+                                        }}
+                                      />
+                                      <span className="text-xs font-black text-slate-600 uppercase tracking-widest">
+                                        Chọn tất cả {displayedCvs.length} CV (Chưa duyệt/Từ chối)
+                                      </span>
+                                    </div>
+                                  )}
+                                  
+                                  {displayedCvs.length === 0 ? (
+                                    <div className="py-24 text-center bg-white rounded-[40px] border border-slate-100">
+                                      <p className="text-slate-400 font-bold italic text-lg capitalize">
+                                        Không có CV nào để hiển thị trong mục này
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    displayedCvs.map((cv) => (
+                                      <div key={cv.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-start justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden group">
+                                        {/* Status strip */}
+                                        <div className={cn(
+                                          "absolute top-0 left-0 w-1.5 h-full transition-all group-hover:w-2",
+                                          cvFilterMapping.completed(cv) ? "bg-green-500" : 
+                                          cvFilterMapping.rejected(cv) ? "bg-red-500" :
+                                          cvFilterMapping.processing(cv) ? "bg-blue-500 animate-pulse" :
+                                          "bg-orange-400 animate-pulse"
+                                        )} />
+                                        
+                                        <div className="flex items-start gap-4 flex-1 w-full pl-2">
+                                          {adminCvTab === 'delete' && (
+                                            <input 
+                                              type="checkbox" 
+                                              className="w-5 h-5 mt-1 rounded border-red-300 text-red-600 focus:ring-red-500 flex-shrink-0"
+                                              checked={selectedDeleteCvIds.includes(cv.id)}
+                                              onChange={(e) => {
+                                                if (e.target.checked) setSelectedDeleteCvIds(prev => [...prev, cv.id]);
+                                                else setSelectedDeleteCvIds(prev => prev.filter(id => id !== cv.id));
+                                              }}
+                                            />
+                                          )}
+                                          {adminCvTab === 'app_approver' && statusSubFilter === 'processing' && (
+                                            <input 
+                                              type="checkbox" 
+                                              className="w-5 h-5 mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
+                                              checked={selectedAppCvIds.includes(cv.id)}
+                                              onChange={(e) => {
+                                                if (e.target.checked) setSelectedAppCvIds(prev => [...prev, cv.id]);
+                                                else setSelectedAppCvIds(prev => prev.filter(id => id !== cv.id));
+                                              }}
+                                            />
+                                          )}
                               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 pl-2 text-left items-start w-full">
                                <div>
                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Học viên</p>
@@ -2252,16 +2442,39 @@ export default function App() {
                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Trạng thái</p>
                                    <div className="flex items-center gap-2">
                                      <p className={cn(
-                                       "text-[10px] font-black uppercase tracking-wider",
-                                       cv.status === 'approved' ? "text-green-600" : (cv.status === 'rejected' ? "text-red-600" : "text-orange-600")
+                                       "text-[10px] font-black uppercase tracking-wider flex items-center gap-1",
+                                       cvFilterMapping.completed(cv) ? "text-green-600" : 
+                                       cvFilterMapping.rejected(cv) ? "text-red-600" : 
+                                       cvFilterMapping.processing(cv) ? "text-blue-600" :
+                                       "text-orange-600"
                                      )}>
-                                       {cv.status === 'approved' ? '✓ Đã duyệt' : (cv.status === 'rejected' ? '✕ Từ chối' : '● Chờ duyệt')}
+                                       {cvFilterMapping.completed(cv) ? <><Check size={12} strokeWidth={3} /> Hoàn thành</> : 
+                                        cvFilterMapping.rejected(cv) ? <><X size={12} strokeWidth={3} /> Từ chối</> : 
+                                        cvFilterMapping.processing(cv) ? '● Đang duyệt' :
+                                        '○ Chờ duyệt'}
                                      </p>
                                    </div>
                                  </div>
                                  
                                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                                   {(!cv.appApproved || isAdmin) && (
+                                   {/* View App Approval Status / App Approver Manual Override */}
+                                   {(cv.status === 'approved' || cv.appApproved || cv.appRejectedReason) && (
+                                     <div 
+                                       className={cn(
+                                         "p-2 rounded-xl transition-all border shadow-sm flex items-center justify-center cursor-default",
+                                         cv.appApproved 
+                                           ? "bg-blue-50 text-blue-600 border-blue-100" 
+                                           : cv.appRejectedReason
+                                             ? "bg-red-50 text-red-600 border-red-100"
+                                             : "bg-slate-50 text-slate-500 border-slate-100"
+                                       )}
+                                       title={cv.appApproved ? "Đã Duyệt App" : cv.appRejectedReason ? "Đã từ chối Duyệt App" : "Chưa Duyệt App"}
+                                     >
+                                       <Smartphone size={16} strokeWidth={3} />
+                                     </div>
+                                   )}
+
+                                   {(!cv.appApproved && (adminCvTab !== 'app_approver' || !cvFilterMapping.pending(cv)) || isAdmin) && (
                                      <button 
                                        onClick={() => startEditCV(cv)}
                                        className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
@@ -2271,35 +2484,7 @@ export default function App() {
                                      </button>
                                    )}
 
-                                   {(cv.status === 'approved' || cv.appApproved || cv.appRejectedReason) && (
-                                     <button 
-                                       onClick={() => {
-                                         if (isAppApprovalMode) {
-                                           setSelectedAppCvIds([cv.id]);
-                                           if (cv.appApproved) {
-                                             setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' });
-                                           } else {
-                                             setCvActionModal({ show: true, cvId: '', type: 'bulkApproveApp' });
-                                           }
-                                         }
-                                       }}
-                                       className={cn(
-                                         "p-2 rounded-xl transition-all border shadow-sm",
-                                         cv.appApproved 
-                                           ? "bg-blue-50 text-blue-600 border-blue-100" 
-                                           : cv.appRejectedReason
-                                             ? "bg-red-50 text-red-600 border-red-100"
-                                             : "bg-slate-50 text-slate-500 border-slate-100",
-                                         isAppApprovalMode && !cv.appRejectedReason && "hover:bg-blue-100 hover:text-blue-600 hover:border-blue-100 cursor-pointer",
-                                         !isAppApprovalMode && "cursor-default opacity-80"
-                                       )}
-                                       title={cv.appApproved ? "Đã Duyệt App" : cv.appRejectedReason ? "Đã từ chối Duyệt App" : "Chưa Duyệt App"}
-                                     >
-                                       {cv.appRejectedReason ? <X size={16} strokeWidth={3} /> : <Smartphone size={16} strokeWidth={3} />}
-                                     </button>
-                                   )}
-
-                                   {cv.status === 'pending' ? (
+                                   {adminCvTab === 'accountant' && cvFilterMapping.pending(cv) && (
                                      <>
                                        <button 
                                         onClick={() => handleCVAction(cv.id, 'approve')}
@@ -2316,34 +2501,54 @@ export default function App() {
                                         <X size={16} strokeWidth={3} />
                                        </button>
                                      </>
-                                   ) : (
+                                   )}
+
+                                   {adminCvTab === 'app_approver' && cvFilterMapping.processing(cv) && (
                                      <>
                                        <button 
-                                        onClick={() => handleCVAction(cv.id, 'restore')}
-                                        className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
-                                        title="Khôi phục về chờ duyệt"
+                                         onClick={() => {
+                                           setSelectedAppCvIds([cv.id]);
+                                           setCvActionModal({ show: true, cvId: '', type: 'bulkApproveApp' });
+                                         }}
+                                         className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl transition-all border border-blue-100 shadow-sm"
+                                         title="Duyệt App"
                                        >
-                                        <RotateCcw size={16} strokeWidth={3} />
+                                         <Check size={16} strokeWidth={3} />
                                        </button>
-                                       {cv.status === 'approved' && (
-                                         <button 
-                                          onClick={() => handleCVAction(cv.id, 'reject')}
-                                          className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
-                                          title="Từ chối"
-                                         >
-                                          <X size={16} strokeWidth={3} />
-                                         </button>
-                                       )}
-                                       {cv.status === 'rejected' && (
-                                         <button 
-                                          onClick={() => handleCVAction(cv.id, 'approve')}
-                                          className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-xl transition-all border border-green-100 shadow-sm"
-                                          title="Phê duyệt lại"
-                                         >
-                                          <Check size={16} strokeWidth={3} />
-                                         </button>
-                                       )}
+                                       <button 
+                                         onClick={() => {
+                                           setSelectedAppCvIds([cv.id]);
+                                           setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' });
+                                         }}
+                                         className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
+                                         title="Từ chối App"
+                                       >
+                                         <X size={16} strokeWidth={3} />
+                                       </button>
                                      </>
+                                   )}
+
+                                   {adminCvTab === 'app_approver' && cvFilterMapping.completed(cv) && (
+                                      <button 
+                                         onClick={() => {
+                                           setSelectedAppCvIds([cv.id]);
+                                           setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' });
+                                         }}
+                                         className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
+                                         title="Hủy Duyệt App"
+                                      >
+                                         <X size={16} strokeWidth={3} />
+                                      </button>
+                                   )}
+
+                                   {cvFilterMapping.rejected(cv) && (
+                                     <button 
+                                      onClick={() => handleCVAction(cv.id, 'restore')}
+                                      className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
+                                      title="Khôi phục"
+                                     >
+                                      <RotateCcw size={16} strokeWidth={3} />
+                                     </button>
                                    )}
                                  </div>
                                </div>
@@ -2355,6 +2560,9 @@ export default function App() {
                      </>
                    );
                  })()}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </motion.div>
                 )}
@@ -2387,63 +2595,100 @@ export default function App() {
                      cvActionModal.type === 'reject' ? 'Từ chối' : 
                      (cvActionModal.type === 'bulkApproveApp' || cvActionModal.type === 'approveApp') ? 'Duyệt App' : 
                      cvActionModal.type === 'bulkRejectApp' ? 'Từ chối Duyệt App' : 
-                     cvActionModal.type === 'enableAppApprovalMode' ? 'Bật Duyệt App' : 'Khôi phục'}
+                     cvActionModal.type === 'enableAppApprovalMode' ? 'Bật Duyệt App' : 
+                     cvActionModal.type === 'enableDeleteCvMode' ? 'Bật Xóa CV' : 
+                     cvActionModal.type === 'bulkDeleteCv' ? 'Xác nhận xóa CV' : 'Khôi phục'}
                   </h3>
                   <div className="p-2 bg-slate-50 text-slate-300 rounded-xl">
-                    <LogIn size={20} />
+                    {cvActionModal.type === 'bulkDeleteCv' ? <Trash2 size={20} /> : <LogIn size={20} />}
                   </div>
                 </div>
 
-                <div className="space-y-6">
-                  {cvActionModal.type === 'bulkRejectApp' && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">LÝ DO TỪ CHỐI DUYỆT APP</label>
-                      <textarea 
-                        placeholder="Nhập lý do chi tiết..." 
-                        value={appRejectReasonInput}
-                        onChange={(e) => setAppRejectReasonInput(e.target.value)}
-                        className="w-full px-7 py-4 bg-slate-50 border border-transparent focus:border-slate-200 outline-none rounded-3xl font-medium text-sm text-slate-800 transition-all placeholder:text-slate-300 min-h-[100px] resize-none" 
-                      />
+                {cvActionModal.type === 'bulkDeleteCv' ? (
+                  <div className="space-y-6">
+                    <p className="text-center text-slate-600 font-medium py-4">Bạn muốn xác nhận xóa vĩnh viễn không?</p>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => setCvActionModal({ show: false, cvId: '', type: null })}
+                        className="flex-1 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      >
+                        NO
+                      </button>
+                      <button 
+                        onClick={confirmCVAction}
+                        disabled={isProcessingAction}
+                        className="flex-1 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all bg-red-600 text-white hover:bg-red-700 shadow-xl shadow-red-200 disabled:opacity-50"
+                      >
+                        {isProcessingAction ? 'ĐANG XỬ LÝ...' : 'YES'}
+                      </button>
                     </div>
-                  )}
-
-                  {cvActionModal.type !== 'bulkRejectApp' && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">MẬT KHẨU ADMIN</label>
-                      <input 
-                        autoFocus
-                        type="password" 
-                        placeholder="••••••" 
-                        value={adminPinInput}
-                        onChange={(e) => setAdminPinInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && confirmCVAction()}
-                        className="w-full px-7 py-4 bg-yellow-50/50 border border-transparent focus:border-yellow-200 outline-none rounded-3xl font-black text-slate-800 transition-all placeholder:text-slate-300" 
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {cvActionModal.type !== 'bulkRejectApp' && (
-                  <div className="bg-yellow-50 p-4 rounded-3xl border border-yellow-100 flex items-start gap-3">
-                    <div className="mt-0.5 text-yellow-600">
-                      <AlertCircle size={16} />
-                    </div>
-                    <p className="text-[10px] text-yellow-700 font-bold leading-relaxed">
-                      Lưu ý: Đây là thao tác quản trị hệ thống. Hãy đảm bảo bạn có quyền thực hiện hành động này.
-                    </p>
                   </div>
+                ) : (
+                  <>
+                    <div className="space-y-6">
+                      {(cvActionModal.type === 'bulkRejectApp' || cvActionModal.type === 'reject') && (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">LÝ DO TỪ CHỐI</label>
+                          <textarea 
+                            placeholder="Nhập lý do chi tiết..." 
+                            value={appRejectReasonInput}
+                            onChange={(e) => setAppRejectReasonInput(e.target.value)}
+                            className="w-full px-7 py-4 bg-slate-50 border border-transparent focus:border-slate-200 outline-none rounded-3xl font-medium text-sm text-slate-800 transition-all placeholder:text-slate-300 min-h-[100px] resize-none" 
+                          />
+                        </div>
+                      )}
+
+                      {(cvActionModal.type !== 'bulkRejectApp' && cvActionModal.type !== 'reject' && !isActionUnlocked()) && (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                            {(() => {
+                              if (cvActionModal.type === 'restore') {
+                                const cvToRestore = cvs.find(c => c.id === cvActionModal.cvId);
+                                return cvToRestore?.appRejectedReason ? 'MẬT KHẨU DUYỆT APP' : 'MẬT KHẨU KẾ TOÁN';
+                              }
+                              if (cvActionModal.type === 'approve') return 'MẬT KHẨU KẾ TOÁN';
+                              if (cvActionModal.type === 'bulkApproveApp') return 'MẬT KHẨU DUYỆT APP';
+                              if (cvActionModal.type === 'bulkDeleteCv') return 'MẬT KHẨU XÓA CV';
+                              return 'MẬT KHẨU ADMIN';
+                            })()}
+                          </label>
+                          <input 
+                            autoFocus
+                            type="password" 
+                            placeholder="••••••" 
+                            value={adminPinInput}
+                            onChange={(e) => setAdminPinInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && confirmCVAction()}
+                            className="w-full px-7 py-4 bg-yellow-50/50 border border-transparent focus:border-yellow-200 outline-none rounded-3xl font-black text-slate-800 transition-all placeholder:text-slate-300" 
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {(cvActionModal.type !== 'bulkRejectApp' && cvActionModal.type !== 'reject' && !isActionUnlocked()) && (
+                      <div className="bg-yellow-50 p-4 rounded-3xl border border-yellow-100 flex items-start gap-3">
+                        <div className="mt-0.5 text-yellow-600">
+                          <AlertCircle size={16} />
+                        </div>
+                        <p className="text-[10px] text-yellow-700 font-bold leading-relaxed">
+                          Lưu ý: Đây là thao tác quản trị hệ thống. Hãy đảm bảo bạn có quyền thực hiện hành động này.
+                        </p>
+                      </div>
+                    )}
+
+                    <button 
+                      onClick={confirmCVAction}
+                      disabled={isProcessingAction || ((cvActionModal.type !== 'bulkRejectApp' && cvActionModal.type !== 'reject' && !isActionUnlocked()) && !adminPinInput) || ((cvActionModal.type === 'bulkRejectApp' || cvActionModal.type === 'reject') && !appRejectReasonInput.trim())}
+                      className={cn(
+                        "w-full py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-[0.98] disabled:opacity-50 disabled:grayscale",
+                        (cvActionModal.type === 'bulkRejectApp' || cvActionModal.type === 'reject') ? "bg-slate-200 text-slate-700 hover:bg-slate-300 shadow-slate-200" : 
+                        "bg-yellow-400 text-amber-950 hover:bg-yellow-300 shadow-yellow-200"
+                      )}
+                    >
+                      {isProcessingAction ? 'ĐANG XỬ LÝ...' : 'XÁC NHẬN THỰC HIỆN'}
+                    </button>
+                  </>
                 )}
-
-                <button 
-                  onClick={confirmCVAction}
-                  disabled={isProcessingAction || (cvActionModal.type !== 'bulkRejectApp' && !adminPinInput) || (cvActionModal.type === 'bulkRejectApp' && !appRejectReasonInput.trim())}
-                  className={cn(
-                    "w-full py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-[0.98] disabled:opacity-50 disabled:grayscale",
-                    cvActionModal.type === 'bulkRejectApp' ? "bg-slate-200 text-slate-700 hover:bg-slate-300 shadow-slate-200" : "bg-yellow-400 text-amber-950 hover:bg-yellow-300 shadow-yellow-200"
-                  )}
-                >
-                  {isProcessingAction ? 'ĐANG XỬ LÝ...' : 'XÁC NHẬN THỰC HIỆN'}
-                </button>
               </div>
             </motion.div>
           </div>
@@ -2579,7 +2824,7 @@ export default function App() {
                   <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
                     <ImageIcon size={20} />
                   </div>
-                  <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm">Minh chứng chuyển khoản</h3>
+                  <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm">Bill Chuyển khoản</h3>
                 </div>
                 <button 
                   onClick={() => setSelectedPaymentImage(null)}
@@ -2661,8 +2906,42 @@ export default function App() {
               </div>
 
               {cvModalTab === 'create' ? (
-                <form onSubmit={handleCVSubmit} className="space-y-6">
-                  <div className="space-y-2">
+                <>
+                  <div className="flex justify-end mb-4">
+                    <button 
+                      type="button" 
+                      onClick={() => setShowCvTemplateModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black hover:bg-blue-100 transition-all uppercase tracking-widest border border-blue-100"
+                    >
+                      <FileText size={14} />
+                      Mẫu CV Học viên
+                    </button>
+                  </div>
+                  
+                  {showCvTemplateModal && (
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-6 relative">
+                      <button 
+                        type="button" 
+                        onClick={() => setShowCvTemplateModal(false)}
+                        className="absolute top-2 right-2 p-2 text-slate-400 hover:text-red-500 rounded-lg transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                      <h4 className="font-bold text-slate-800 text-sm mb-3">Mẫu CV Đăng ký</h4>
+                      <pre className="text-xs font-medium text-slate-600 whitespace-pre-wrap bg-white p-4 rounded-xl border border-slate-100 mb-4">{`CV - ĐĂNG KÝ HỌC TẬP\n........................................\n1. Họ tên:\n2. Điện thoại:\n3. Tuổi:\n4. Địa Chỉ:\n5. Công Việc:\n6. Mong muốn:`}</pre>
+                      <button 
+                        type="button"
+                        onClick={handleCopyTemplate}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-slate-800 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-900 transition-all"
+                      >
+                        <Copy size={16} />
+                        Copy Mẫu
+                      </button>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleCVSubmit} className="space-y-6">
+                    <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Dán thông tin từ văn bản (Hệ thống tự điền)</label>
                     <textarea 
                       placeholder="Coppy và dán nội dung CV tại đây..." 
@@ -2784,7 +3063,7 @@ export default function App() {
                     {cvFormData.paymentImageUrl && (
                       <div className="flex items-center gap-2 px-3 py-2 bg-green-100/50 rounded-xl text-[9px] font-bold text-green-700">
                         <CheckCircle2 size={12} />
-                        <span>Đã tải lên ảnh minh chứng thành công</span>
+                        <span>Đã tải lên ảnh bill chuyển khoản thành công</span>
                       </div>
                     )}
                   </div>
@@ -2793,7 +3072,8 @@ export default function App() {
                     className="w-full py-4 bg-amber-950 text-yellow-400 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50">
                     {isSubmittingCV ? 'Đang lưu...' : 'Lưu Hồ Sơ CV'}
                   </button>
-                </form>
+                  </form>
+                </>
               ) : (
                 <div className="space-y-8">
                   <div className="space-y-4">
@@ -2847,48 +3127,62 @@ export default function App() {
                             {foundCV.status === 'approved' ? 'Đã phê duyệt' : 
                              foundCV.status === 'rejected' ? 'Bị từ chối' : 'Chờ phê duyệt'}
                           </span>
-                          <button 
-                            onClick={() => startEditCV(foundCV)}
-                            className="p-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors shadow-sm border border-blue-100"
-                            title="Chỉnh sửa thông tin"
-                          >
-                            <Edit3 size={14} />
-                          </button>
+                          {!foundCV.appApproved && (
+                            <button 
+                              onClick={() => startEditCV(foundCV)}
+                              className="p-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors shadow-sm border border-blue-100"
+                              title="Chỉnh sửa thông tin"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
                       
                       {foundCV.status === 'pending' && (
                         <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl text-[10px] text-orange-600 font-bold flex items-center gap-2">
                           <Clock size={12} />
-                          <span>Hồ sơ của bạn đang chờ quản trị viên kiểm tra và phê duyệt.</span>
+                          <span>Hồ sơ của bạn đang chờ Kế toán kiểm tra và phê duyệt.</span>
                         </div>
                       )}
                       
                       {foundCV.status === 'rejected' && (
-                        <div className="bg-red-50 border border-red-100 p-3 rounded-xl text-[10px] text-red-600 font-bold flex items-center gap-2">
-                          <X size={12} />
-                          <span>Hồ sơ của bạn đã bị từ chối. Vui lòng liên hệ quản trị viên để biết thêm chi tiết.</span>
+                        <div className="bg-red-50 border border-red-100 p-4 rounded-xl text-[10px] text-red-600 font-bold flex flex-col gap-2 mt-2">
+                          <div className="flex items-center gap-2">
+                            <X size={14} />
+                            <span className="text-sm">Hồ sơ của bạn đã bị từ chối bởi Kế toán. Vui lòng chỉnh sửa lại.</span>
+                          </div>
+                          {foundCV.cancellationReason && (
+                            <p className="mt-2 text-xs font-medium italic p-3 bg-red-100/50 rounded-lg">
+                              <span className="text-red-400 font-black not-italic mr-1">Lý do từ chối:</span> 
+                              {foundCV.cancellationReason}
+                            </p>
+                          )}
                         </div>
                       )}
 
                       {foundCV.status === 'approved' && (
                         <div className={cn(
-                          "border p-3 rounded-xl text-[10px] font-bold flex flex-col gap-1 mt-2",
+                          "border p-4 rounded-xl text-[10px] font-bold flex flex-col gap-2 mt-2",
                           foundCV.appApproved === true 
                             ? "bg-blue-50 border-blue-100 text-blue-600" 
                             : foundCV.appRejectedReason
                               ? "bg-red-50 border-red-100 text-red-600"
-                              : "bg-slate-50 border-slate-200 text-slate-600"
+                              : "bg-green-50 border-green-100 text-green-600"
                         )}>
                           <div className="flex items-center gap-2">
-                            <Smartphone size={12} />
-                            <span>
-                              Trạng thái App: {foundCV.appApproved === true ? 'Đã Duyệt (Có thể đăng nhập)' : foundCV.appRejectedReason ? 'Không được duyệt' : 'Đang chờ duyệt App'}
+                            {foundCV.appApproved === true ? <Smartphone size={14} /> : foundCV.appRejectedReason ? <X size={14} /> : <Check size={14} />}
+                            <span className="text-sm">
+                              {foundCV.appApproved === true 
+                                ? "Đã được kích hoạt trên App" 
+                                : foundCV.appRejectedReason 
+                                  ? "Duyệt App thất bại. Vui lòng sửa lỗi và đợi cập nhật lại." 
+                                  : "Đã qua bước Kế toán phê duyệt. Đang chờ Duyệt App."}
                             </span>
                           </div>
                           {foundCV.appRejectedReason && (
-                            <p className="mt-2 text-[11px] font-medium italic p-2 bg-red-100/50 rounded-lg">
-                              <span className="text-red-400 font-black not-italic mr-1">Lý do từ chối:</span> 
+                            <p className="mt-2 text-xs font-medium italic p-3 bg-red-100/50 rounded-lg">
+                              <span className="text-red-400 font-black not-italic mr-1">Lý do từ chối Duyệt App:</span> 
                               {foundCV.appRejectedReason}
                             </p>
                           )}
@@ -2921,7 +3215,7 @@ export default function App() {
 
                       {foundCV.paymentImageUrl && (
                         <div className="space-y-3">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Minh chứng chuyển khoản</p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Bill Chuyển khoản</p>
                           <div className="rounded-2xl overflow-hidden border border-yellow-200 bg-white">
                             <img src={foundCV.paymentImageUrl} alt="Chuyển khoản" className="w-full h-auto max-h-64 object-contain" />
                           </div>
