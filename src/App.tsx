@@ -57,7 +57,9 @@ import {
   List,
   CircleDollarSign,
   Copy,
-  ShieldAlert
+  ShieldAlert,
+  ChevronDown,
+  SlidersHorizontal
 } from 'lucide-react';
 import { 
   collection, 
@@ -199,6 +201,9 @@ export default function App() {
   const [unlockedRoles, setUnlockedRoles] = useState({ accountant: false, app_approver: false, delete: false });
   const [adminCvTab, setAdminCvTab] = useState<'status' | 'accountant' | 'app_approver' | 'delete'>('status');
   const [statusSubFilter, setStatusSubFilter] = useState<'all' | 'pending' | 'processing' | 'completed' | 'rejected'>('all');
+  const [cvListViewMode, setCvListViewMode] = useState<'by_date' | 'prioritized'>('by_date');
+  const [isViewModeMenuOpen, setIsViewModeMenuOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [showCvTemplateModal, setShowCvTemplateModal] = useState(false);
 
   const handleCopyTemplate = async () => {
@@ -1066,39 +1071,61 @@ export default function App() {
     });
   };
 
-  const exportCVsToExcel = async () => {
+  const exportCVsToExcel = async (filterType: 'all' | 'completed' | 'rejected') => {
     const { utils, writeFile } = await import('xlsx');
     
     const formatCVData = (items: CV[]) => items.map((cv, index) => ({
       'STT': index + 1,
-      'Ngày tham gia': cv.createdAt ? format(cv.createdAt.toDate(), 'dd/MM/yyyy HH:mm') : '',
+      'Người duyệt': cv.processedBy || 'Chưa duyệt',
+      'Ngày tạo CV': cv.createdAt ? format(cv.createdAt.toDate(), 'dd/MM/yyyy HH:mm') : '',
       'Số điện thoại': cv.phone,
-      'Họ tên': cv.fullName,
+      'Tên học viên': cv.fullName,
       'Tuổi': cv.age,
-      'Tên hướng dẫn viên': cv.guideName,
-      'Ngày admin xử lý': cv.processedAt ? format(cv.processedAt.toDate(), 'dd/MM/yyyy HH:mm') : (cv.status === 'pending' ? 'Chưa xử lý' : 'N/A')
+      'Hướng dẫn viên': cv.guideName
     }));
 
-    const workbook = utils.book_new();
-
-    // Sheet 1: Tất cả
-    const allData = formatCVData(cvs);
-    utils.book_append_sheet(workbook, utils.json_to_sheet(allData), 'Tất cả');
-
-    // Sheet 2: Chờ phê duyệt
-    const pendingData = formatCVData(cvs.filter(c => c.status === 'pending'));
-    utils.book_append_sheet(workbook, utils.json_to_sheet(pendingData), 'Chờ phê duyệt');
-
-    // Sheet 3: Đã phê duyệt
-    const approvedData = formatCVData(cvs.filter(c => c.status === 'approved'));
-    utils.book_append_sheet(workbook, utils.json_to_sheet(approvedData), 'Đã phê duyệt');
-
-    // Sheet 4: Từ chối
-    const rejectedData = formatCVData(cvs.filter(c => c.status === 'rejected'));
-    utils.book_append_sheet(workbook, utils.json_to_sheet(rejectedData), 'Từ chối');
+    let filteredData = cvs;
+    let filenameSuffix = "TatCa";
+    let sheetName = "Tất cả";
     
-    const filename = `Bao_Cao_CV_Hoc_Vien_${format(new Date(), 'dd_MM_yyyy')}.xlsx`;
-    writeFile(workbook, filename);
+    if (filterType === 'completed') {
+      filteredData = cvs.filter(cvFilterMapping.completed);
+      filenameSuffix = "DaHoanThanh";
+      sheetName = "Đã hoàn thành";
+    } else if (filterType === 'rejected') {
+      filteredData = cvs.filter(cvFilterMapping.rejected);
+      filenameSuffix = "TuChoi";
+      sheetName = "Từ chối";
+    }
+
+    // Sort data: Ngày tạo CV mới nhất (desc) -> Người duyệt (asc) -> Hướng dẫn viên (asc)
+    filteredData = [...filteredData].sort((a, b) => {
+      // 1. Sort by day first (descending). We compare the start of the day to group them by same day.
+      const dateA = a.createdAt ? startOfDay(a.createdAt.toDate()).getTime() : 0;
+      const dateB = b.createdAt ? startOfDay(b.createdAt.toDate()).getTime() : 0;
+      if (dateA !== dateB) {
+        return dateB - dateA; // Descending by date
+      }
+      
+      // 2. Same day -> Sort by reviewer
+      const reviewerA = a.processedBy || '';
+      const reviewerB = b.processedBy || '';
+      if (reviewerA !== reviewerB) {
+        return reviewerA.localeCompare(reviewerB);
+      }
+      
+      // 3. Same day, same reviewer -> Sort by guide name
+      const guideA = a.guideName || '';
+      const guideB = b.guideName || '';
+      return guideA.localeCompare(guideB);
+    });
+
+    const worksheetData = formatCVData(filteredData);
+    const workbook = utils.book_new();
+    utils.book_append_sheet(workbook, utils.json_to_sheet(worksheetData), sheetName);
+
+    writeFile(workbook, `Danh_Sach_CV_${filenameSuffix}_${format(new Date(), 'ddMMyyyy_HHmm')}.xlsx`);
+    setIsExportMenuOpen(false);
   };
 
   const toggleLockSlot = async (slot: string) => {
@@ -1631,7 +1658,7 @@ export default function App() {
                       </div>
                       <div>
                         <h3 className="text-xs font-black text-yellow-600 uppercase tracking-widest mb-1">Hướng dẫn</h3>
-                        <p className="text-2xl font-black text-slate-900 leading-none">3 BƯỚC ĐẶT LỊCH</p>
+                        <p className="text-2xl font-heading font-black text-slate-900 leading-none">3 BƯỚC ĐẶT LỊCH</p>
                       </div>
                     </div>
                     <p className="text-sm text-slate-500 font-medium leading-relaxed">
@@ -1718,7 +1745,7 @@ export default function App() {
                   <p className="text-slate-500 mt-1 font-medium">{format(selectedDate, 'EEEE, d MMMM yyyy', { locale: vi })}</p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                   {[
                     { id: 'appointments', label: 'Lịch hẹn', icon: <CalendarDays size={16} />, activeColor: "bg-blue-100 text-blue-700 border-blue-200" },
                     { id: 'config', label: 'Cấu hình lịch hẹn', icon: <Clock size={16} />, activeColor: "bg-purple-100 text-purple-700 border-purple-200" },
@@ -1729,14 +1756,21 @@ export default function App() {
                       key={tab.id}
                       onClick={() => setActiveAdminTab(tab.id as any)}
                       className={cn(
-                        "flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border",
-                        activeAdminTab === tab.id 
-                          ? tab.activeColor 
-                          : "bg-slate-50 border-slate-100 text-slate-500 hover:text-slate-700 hover:border-slate-200 hover:bg-slate-100 shadow-sm"
+                        "flex items-center px-4 md:px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border overflow-hidden",
+                         activeAdminTab === tab.id 
+                          ? cn(tab.activeColor, "flex-1 md:flex-none justify-center gap-2 shadow-md") 
+                          : "bg-slate-50 border-slate-100 text-slate-500 hover:text-slate-700 hover:border-slate-200 hover:bg-slate-100 shadow-sm justify-center gap-0 md:gap-2 flex-none"
                       )}
                     >
-                      {tab.icon}
-                      {tab.label}
+                      <div className="flex-shrink-0">{tab.icon}</div>
+                      <span className={cn(
+                        "transition-all duration-300 ease-in-out whitespace-nowrap overflow-hidden",
+                        activeAdminTab === tab.id 
+                          ? "max-w-[200px] opacity-100" 
+                          : "max-w-0 opacity-0 md:max-w-[200px] md:opacity-100"
+                      )}>
+                        {tab.label}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -2223,16 +2257,16 @@ export default function App() {
                             key={tab.id}
                             onClick={() => setStatusSubFilter(tab.id as any)}
                             className={cn(
-                              "flex flex-1 items-center justify-center gap-2 px-6 py-3 rounded-full text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                              "flex flex-1 items-center justify-center gap-2 px-6 py-3 rounded-full text-xs font-bold uppercase transition-all whitespace-nowrap",
                               statusSubFilter === tab.id 
-                                ? "bg-[#101423] text-white shadow-md" 
-                                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50/50"
+                                ? "bg-yellow-100 text-yellow-700 shadow-md border border-yellow-200" 
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-50/50"
                             )}
                           >
                             <span>{tab.label}</span>
                             <span className={cn(
-                              "py-0.5 px-2 rounded-full text-[9px] font-bold leading-none",
-                              statusSubFilter === tab.id ? "bg-white/20" : "bg-slate-200/60"
+                              "py-0.5 px-2 rounded-full text-[10px] font-black leading-none",
+                              statusSubFilter === tab.id ? "bg-yellow-200" : "bg-slate-200/60"
                             )}>
                               {count}
                             </span>
@@ -2243,34 +2277,9 @@ export default function App() {
                       </div>
 
                       {adminCvTab !== 'status' && !unlockedRoles[adminCvTab as keyof typeof unlockedRoles] ? (
-                        <div className="bg-white p-12 rounded-[40px] border border-slate-100 text-center shadow-sm max-w-md mx-auto mt-8">
-                          <div className="w-20 h-20 bg-slate-50 flex items-center justify-center rounded-3xl mx-auto mb-6 shadow-inset">
-                            <Lock size={32} className="text-slate-300" />
-                          </div>
-                          <h4 className="font-black text-slate-800 text-lg tracking-tight mb-2 uppercase">Yêu cầu mở khóa</h4>
-                          <p className="text-sm text-slate-500 font-medium mb-8">
-                            Bạn cần cung cấp mật khẩu để truy cập không gian làm việc của {
-                              adminCvTab === 'accountant' ? 'Kế toán' :
-                              adminCvTab === 'app_approver' ? 'Duyệt App' : 'Xóa CV'
-                            }.
-                          </p>
-                          <div className="space-y-4">
-                            <input 
-                              type="password"
-                              placeholder="Nhập mã PIN..."
-                              value={rolePasswords[adminCvTab as 'accountant' | 'app_approver' | 'delete']}
-                              onChange={e => setRolePasswords({ ...rolePasswords, [adminCvTab]: e.target.value })}
-                              onKeyDown={e => e.key === 'Enter' && handleRoleUnlock(adminCvTab as 'accountant' | 'app_approver' | 'delete')}
-                              className="w-full px-6 py-4 bg-slate-50 border border-slate-200 focus:border-blue-400 outline-none rounded-2xl font-bold text-slate-800 text-center tracking-widest shadow-inner transition-all"
-                            />
-                            <button 
-                              onClick={() => handleRoleUnlock(adminCvTab as 'accountant' | 'app_approver' | 'delete')}
-                              disabled={!rolePasswords[adminCvTab as 'accountant' | 'app_approver' | 'delete']}
-                              className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50"
-                            >
-                              Mở khóa
-                            </button>
-                          </div>
+                        <div className="py-24 text-center bg-white rounded-[40px] border border-slate-100 opacity-50 blur-[2px] pointer-events-none select-none">
+                          <Lock size={48} className="mx-auto text-slate-200 mb-4" />
+                          <p className="text-xl font-bold text-slate-300 uppercase tracking-widest">Nội dung đã khóa</p>
                         </div>
                       ) : (
                         <>
@@ -2308,9 +2317,325 @@ export default function App() {
                             </div>
                           )}
 
+                          <div className="mt-8 mb-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <h3 className="font-bold text-slate-800 text-sm tracking-tight uppercase">Danh sách thực thi</h3>
+                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                              {/* Export Dropdown */}
+                              <div className="relative w-full sm:w-auto">
+                                <button 
+                                  onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                                  className="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 bg-green-50 text-green-700 border border-green-200 rounded-xl hover:bg-green-100 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-green-100"
+                                >
+                                  <Download size={16} strokeWidth={2.5} />
+                                  <span className="text-xs font-black uppercase tracking-widest text-green-700">Tải EXCEL</span>
+                                  <ChevronDown size={14} strokeWidth={3} className={cn("transition-transform opacity-60", isExportMenuOpen && "rotate-180")} />
+                                </button>
+                                
+                                <AnimatePresence>
+                                  {isExportMenuOpen && (
+                                    <>
+                                      <div 
+                                        className="fixed inset-0 z-10" 
+                                        onClick={() => setIsExportMenuOpen(false)} 
+                                      />
+                                      <motion.div 
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        className="absolute right-0 top-full mt-2 w-full sm:w-48 bg-white rounded-2xl shadow-xl border border-slate-100 z-20 overflow-hidden"
+                                      >
+                                        <div className="p-2 space-y-1 text-left">
+                                          <button 
+                                            onClick={() => exportCVsToExcel('all')}
+                                            className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors uppercase tracking-wide"
+                                          >
+                                            Tất cả
+                                          </button>
+                                          <button 
+                                            onClick={() => exportCVsToExcel('completed')}
+                                            className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold text-green-700 hover:bg-green-50 transition-colors uppercase tracking-wide"
+                                          >
+                                            Đã hoàn thành
+                                          </button>
+                                          <button 
+                                            onClick={() => exportCVsToExcel('rejected')}
+                                            className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold text-red-700 hover:bg-red-50 transition-colors uppercase tracking-wide"
+                                          >
+                                            Từ chối
+                                          </button>
+                                        </div>
+                                      </motion.div>
+                                    </>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+
+                              {/* View Mode Dropdown */}
+                              <div className="relative w-full sm:w-auto">
+                              <button 
+                                onClick={() => setIsViewModeMenuOpen(!isViewModeMenuOpen)}
+                                className="flex items-center justify-between w-full sm:w-auto gap-3 pl-4 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-100"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <SlidersHorizontal size={16} strokeWidth={2.5} className="text-slate-400" />
+                                  <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                                    Chế độ xem
+                                    <span className="text-blue-600 ml-1">
+                                      {cvListViewMode === 'by_date' ? '(Theo ngày)' : '(Ưu tiên xử lý)'}
+                                    </span>
+                                  </span>
+                                </div>
+                                <ChevronDown size={16} strokeWidth={2.5} className={cn("text-slate-400 transition-transform", isViewModeMenuOpen && "rotate-180")} />
+                              </button>
+                              
+                              <AnimatePresence>
+                                {isViewModeMenuOpen && (
+                                  <>
+                                    <div 
+                                      className="fixed inset-0 z-10" 
+                                      onClick={() => setIsViewModeMenuOpen(false)} 
+                                    />
+                                    <motion.div 
+                                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                      className="absolute right-0 top-full mt-2 w-full sm:w-64 bg-white rounded-2xl shadow-xl border border-slate-100 z-20 overflow-hidden"
+                                    >
+                                      <div className="p-2 space-y-1">
+                                        <button 
+                                          onClick={() => { setCvListViewMode('by_date'); setIsViewModeMenuOpen(false); }}
+                                          className={cn(
+                                            "flex items-center gap-3 w-full px-4 py-3 rounded-xl text-left text-xs font-bold uppercase tracking-wide transition-colors",
+                                            cvListViewMode === 'by_date' ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
+                                          )}
+                                        >
+                                          {cvListViewMode === 'by_date' && <Check size={16} strokeWidth={3} className="text-blue-600" />}
+                                          <span className={cn(cvListViewMode === 'by_date' ? "ml-0" : "ml-7")}>Theo ngày</span>
+                                        </button>
+                                        <button 
+                                          onClick={() => { setCvListViewMode('prioritized'); setIsViewModeMenuOpen(false); }}
+                                          className={cn(
+                                            "flex items-center gap-3 w-full px-4 py-3 rounded-xl text-left text-xs font-bold uppercase tracking-wide transition-colors",
+                                            cvListViewMode === 'prioritized' ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50"
+                                          )}
+                                        >
+                                          {cvListViewMode === 'prioritized' && <Check size={16} strokeWidth={3} className="text-blue-600" />}
+                                          <span className={cn(cvListViewMode === 'prioritized' ? "ml-0" : "ml-7")}>Ưu tiên chờ xử lý</span>
+                                        </button>
+                                      </div>
+                                    </motion.div>
+                                  </>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                            </div>
+                          </div>
+
                           <div className="grid grid-cols-1 gap-4">
                             {(() => {
                               const displayedCvs = getFilteredCVs();
+                              
+                              const renderCVList = (cvList: CV[]) => cvList.map((cv) => (
+                                <div key={cv.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-start justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden group">
+                                  {/* Status strip */}
+                                  <div className={cn(
+                                    "absolute top-0 left-0 w-1.5 h-full transition-all group-hover:w-2",
+                                    cvFilterMapping.completed(cv) ? "bg-green-500" : 
+                                    cvFilterMapping.rejected(cv) ? "bg-red-500" :
+                                    cvFilterMapping.processing(cv) ? "bg-blue-500 animate-pulse" :
+                                    "bg-orange-400 animate-pulse"
+                                  )} />
+                                  
+                                  <div className="flex items-start gap-4 flex-1 w-full pl-2">
+                                    {adminCvTab === 'delete' && (
+                                      <input 
+                                        type="checkbox" 
+                                        className="w-5 h-5 mt-1 rounded border-red-300 text-red-600 focus:ring-red-500 flex-shrink-0"
+                                        checked={selectedDeleteCvIds.includes(cv.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) setSelectedDeleteCvIds(prev => [...prev, cv.id]);
+                                          else setSelectedDeleteCvIds(prev => prev.filter(id => id !== cv.id));
+                                        }}
+                                      />
+                                    )}
+                                    {adminCvTab === 'app_approver' && statusSubFilter === 'processing' && (
+                                      <input 
+                                        type="checkbox" 
+                                        className="w-5 h-5 mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
+                                        checked={selectedAppCvIds.includes(cv.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) setSelectedAppCvIds(prev => [...prev, cv.id]);
+                                          else setSelectedAppCvIds(prev => prev.filter(id => id !== cv.id));
+                                        }}
+                                      />
+                                    )}
+                                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 pl-2 text-left items-start w-full">
+                                     <div>
+                                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Học viên</p>
+                                       <h4 className="font-bold text-slate-900 text-sm">{cv.fullName} ({cv.age}t)</h4>
+                                       <p className="text-sm font-medium text-slate-600 select-all">{cv.phone}</p>
+                                     </div>
+                                     <div>
+                                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
+                                       <p className="text-xs font-bold text-blue-600 truncate">{cv.guideName}</p>
+                                       <div className="flex items-center gap-2 mt-0.5">
+                                         <span className="text-[9px] font-medium text-slate-400 italic">SĐT: ...{cv.guidePhoneLast4}</span>
+                                         <span className="w-1 h-1 rounded-full bg-slate-200" />
+                                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">PIN: {cv.password}</span>
+                                       </div>
+                                     </div>
+                                     <div>
+                                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">BILL CHUYỂN KHOẢN</p>
+                                       {cv.paymentImageUrl ? (
+                                         <button 
+                                           onClick={() => setSelectedPaymentImage(cv.paymentImageUrl || null)}
+                                           className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 flex items-center gap-2 shadow-sm w-fit"
+                                         >
+                                           <ImageIcon size={14} />
+                                           <span className="text-[9px] font-black uppercase tracking-wider">Xem ảnh</span>
+                                         </button>
+                                       ) : (
+                                         <p className="text-[10px] font-medium text-slate-400 italic">Không có ảnh</p>
+                                       )}
+                                     </div>
+                                     
+                                     <div>
+                                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Người duyệt</p>
+                                       {cv.status === 'pending' ? (
+                                         <select
+                                           className="text-[10px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400 transition-colors cursor-pointer uppercase tracking-wide"
+                                           value={localReviewers[cv.id] || ''}
+                                           onChange={(e) => setLocalReviewers(prev => ({ ...prev, [cv.id]: e.target.value }))}
+                                         >
+                                           <option value="" disabled>CHỌN NGƯỜI DUYỆT</option>
+                                           {REVIEWERS.map(r => (
+                                             <option key={r} value={r}>{r}</option>
+                                           ))}
+                                         </select>
+                                       ) : (
+                                         <p className="text-[10px] font-bold text-slate-600 uppercase mt-1">{cv.processedBy || 'Chưa rõ'}</p>
+                                       )}
+                                     </div>
+                                     
+                                     <div className="flex flex-col gap-2">
+                                       <div className="hidden sm:block">
+                                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Trạng thái</p>
+                                         <div className="flex items-center gap-2">
+                                           <p className={cn(
+                                             "text-[10px] font-black uppercase tracking-wider flex items-center gap-1",
+                                             cvFilterMapping.completed(cv) ? "text-green-600" : 
+                                             cvFilterMapping.rejected(cv) ? "text-red-600" : 
+                                             cvFilterMapping.processing(cv) ? "text-blue-600" :
+                                             "text-orange-600"
+                                           )}>
+                                             {cvFilterMapping.completed(cv) ? <><Check size={12} strokeWidth={3} /> Hoàn thành</> : 
+                                              cvFilterMapping.rejected(cv) ? <><X size={12} strokeWidth={3} /> Từ chối</> : 
+                                              cvFilterMapping.processing(cv) ? '● Đang duyệt' :
+                                              '○ Chờ duyệt'}
+                                           </p>
+                                         </div>
+                                       </div>
+                                       
+                                       <div className="flex flex-wrap items-center gap-2 mt-2">
+                                         {/* View App Approval Status / App Approver Manual Override */}
+                                         {(cv.status === 'approved' || cv.appApproved || cv.appRejectedReason) && (
+                                           <div 
+                                             className={cn(
+                                               "p-2 rounded-xl transition-all border shadow-sm flex items-center justify-center cursor-default",
+                                               cv.appApproved 
+                                                 ? "bg-blue-50 text-blue-600 border-blue-100" 
+                                                 : cv.appRejectedReason
+                                                   ? "bg-red-50 text-red-600 border-red-100"
+                                                   : "bg-slate-50 text-slate-500 border-slate-100"
+                                             )}
+                                             title={cv.appApproved ? "Đã Duyệt App" : cv.appRejectedReason ? "Đã từ chối Duyệt App" : "Chưa Duyệt App"}
+                                           >
+                                             <Smartphone size={16} strokeWidth={3} />
+                                           </div>
+                                         )}
+
+                                         {(unlockedRoles.accountant || unlockedRoles.app_approver || unlockedRoles.delete) && (
+                                           <button 
+                                             onClick={() => startEditCV(cv)}
+                                             className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
+                                             title="Sửa thông tin"
+                                           >
+                                             <Edit3 size={16} strokeWidth={3} />
+                                           </button>
+                                         )}
+
+                                         {adminCvTab === 'accountant' && cvFilterMapping.pending(cv) && (
+                                           <>
+                                             <button 
+                                              onClick={() => handleCVAction(cv.id, 'approve')}
+                                              className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-xl transition-all border border-green-100 shadow-sm"
+                                              title="Phê duyệt"
+                                             >
+                                              <Check size={16} strokeWidth={3} />
+                                             </button>
+                                             <button 
+                                              onClick={() => handleCVAction(cv.id, 'reject')}
+                                              className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
+                                              title="Từ chối"
+                                             >
+                                              <X size={16} strokeWidth={3} />
+                                             </button>
+                                           </>
+                                         )}
+
+                                         {adminCvTab === 'app_approver' && cvFilterMapping.processing(cv) && (
+                                           <>
+                                             <button 
+                                               onClick={() => {
+                                                 setSelectedAppCvIds([cv.id]);
+                                                 setCvActionModal({ show: true, cvId: '', type: 'bulkApproveApp' });
+                                               }}
+                                               className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl transition-all border border-blue-100 shadow-sm"
+                                               title="Duyệt App"
+                                             >
+                                               <Check size={16} strokeWidth={3} />
+                                             </button>
+                                             <button 
+                                               onClick={() => {
+                                                 setSelectedAppCvIds([cv.id]);
+                                                 setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' });
+                                               }}
+                                               className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
+                                               title="Từ chối App"
+                                             >
+                                               <X size={16} strokeWidth={3} />
+                                             </button>
+                                           </>
+                                         )}
+
+                                         {adminCvTab === 'app_approver' && cvFilterMapping.completed(cv) && (
+                                            <button 
+                                               onClick={() => {
+                                                 setSelectedAppCvIds([cv.id]);
+                                                 setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' });
+                                               }}
+                                               className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
+                                               title="Hủy Duyệt App"
+                                            >
+                                               <X size={16} strokeWidth={3} />
+                                            </button>
+                                         )}
+
+                                         {cvFilterMapping.rejected(cv) && (
+                                           <button 
+                                            onClick={() => handleCVAction(cv.id, 'restore')}
+                                            className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
+                                            title="Khôi phục"
+                                           >
+                                            <RotateCcw size={16} strokeWidth={3} />
+                                           </button>
+                                         )}
+                                       </div>
+                                     </div>
+                                   </div>
+                                 </div>
+                               </div>
+                              ));
                               
                               return (
                                 <>
@@ -2347,219 +2672,68 @@ export default function App() {
                                       </span>
                                     </div>
                                   )}
-                                  
+
                                   {displayedCvs.length === 0 ? (
                                     <div className="py-24 text-center bg-white rounded-[40px] border border-slate-100">
                                       <p className="text-slate-400 font-bold italic text-lg capitalize">
                                         Không có CV nào để hiển thị trong mục này
                                       </p>
                                     </div>
+                                  ) : cvListViewMode === 'by_date' ? (
+                                    Object.entries(
+                                      displayedCvs.reduce((acc, cv) => {
+                                        const dateStr = cv.createdAt ? format(cv.createdAt.toDate(), 'dd/MM/yyyy') : 'Chưa rõ ràng';
+                                        if (!acc[dateStr]) acc[dateStr] = [];
+                                        acc[dateStr].push(cv);
+                                        return acc;
+                                      }, {} as Record<string, CV[]>)
+                                    ).map(([dateStr, cvsInDate]) => (
+                                      <div key={dateStr} className="mb-8">
+                                        <div className="flex items-center gap-2 mb-4 px-2">
+                                          <h4 className="text-sm font-black text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">Ngày {dateStr}</h4>
+                                          <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded-full">{(cvsInDate as CV[]).length} CV</span>
+                                        </div>
+                                        <div className="space-y-4">
+                                          {renderCVList(cvsInDate as CV[])}
+                                        </div>
+                                      </div>
+                                    ))
                                   ) : (
-                                    displayedCvs.map((cv) => (
-                                      <div key={cv.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-start justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden group">
-                                        {/* Status strip */}
-                                        <div className={cn(
-                                          "absolute top-0 left-0 w-1.5 h-full transition-all group-hover:w-2",
-                                          cvFilterMapping.completed(cv) ? "bg-green-500" : 
-                                          cvFilterMapping.rejected(cv) ? "bg-red-500" :
-                                          cvFilterMapping.processing(cv) ? "bg-blue-500 animate-pulse" :
-                                          "bg-orange-400 animate-pulse"
-                                        )} />
-                                        
-                                        <div className="flex items-start gap-4 flex-1 w-full pl-2">
-                                          {adminCvTab === 'delete' && (
-                                            <input 
-                                              type="checkbox" 
-                                              className="w-5 h-5 mt-1 rounded border-red-300 text-red-600 focus:ring-red-500 flex-shrink-0"
-                                              checked={selectedDeleteCvIds.includes(cv.id)}
-                                              onChange={(e) => {
-                                                if (e.target.checked) setSelectedDeleteCvIds(prev => [...prev, cv.id]);
-                                                else setSelectedDeleteCvIds(prev => prev.filter(id => id !== cv.id));
-                                              }}
-                                            />
+                                    (() => {
+                                      const priorityCvs = displayedCvs.filter(c => cvFilterMapping.pending(c) || cvFilterMapping.processing(c));
+                                      const otherCvs = displayedCvs.filter(c => !(cvFilterMapping.pending(c) || cvFilterMapping.processing(c)));
+                                      
+                                      return (
+                                        <div className="space-y-12">
+                                          {priorityCvs.length > 0 && (
+                                            <div>
+                                              <div className="flex items-center gap-2 mb-4 px-2">
+                                                <h4 className="text-sm font-black text-blue-700 bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 shadow-sm">Cần xử lý ngay</h4>
+                                                <span className="bg-white border border-blue-200 text-blue-700 text-xs font-bold px-2 py-1 rounded-full shadow-sm">{priorityCvs.length} CV</span>
+                                              </div>
+                                              <div className="space-y-4">
+                                                {renderCVList(priorityCvs)}
+                                              </div>
+                                            </div>
                                           )}
-                                          {adminCvTab === 'app_approver' && statusSubFilter === 'processing' && (
-                                            <input 
-                                              type="checkbox" 
-                                              className="w-5 h-5 mt-1 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
-                                              checked={selectedAppCvIds.includes(cv.id)}
-                                              onChange={(e) => {
-                                                if (e.target.checked) setSelectedAppCvIds(prev => [...prev, cv.id]);
-                                                else setSelectedAppCvIds(prev => prev.filter(id => id !== cv.id));
-                                              }}
-                                            />
+                                          {otherCvs.length > 0 && (
+                                            <div>
+                                              <div className="flex items-center gap-2 mb-4 px-2">
+                                                <h4 className="text-sm font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">Đã xử lý (Hoàn thành / Từ chối)</h4>
+                                                <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded-full shadow-sm">{otherCvs.length} CV</span>
+                                              </div>
+                                              <div className="space-y-4">
+                                                {renderCVList(otherCvs)}
+                                              </div>
+                                            </div>
                                           )}
-                              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 pl-2 text-left items-start w-full">
-                               <div>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Học viên</p>
-                                 <h4 className="font-bold text-slate-900 text-sm">{cv.fullName} ({cv.age}t)</h4>
-                                 <p className="text-sm font-medium text-slate-600 select-all">{cv.phone}</p>
-                               </div>
-                               <div>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
-                                 <p className="text-xs font-bold text-blue-600 truncate">{cv.guideName}</p>
-                                 <div className="flex items-center gap-2 mt-0.5">
-                                   <span className="text-[9px] font-medium text-slate-400 italic">SĐT: ...{cv.guidePhoneLast4}</span>
-                                   <span className="w-1 h-1 rounded-full bg-slate-200" />
-                                   <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">PIN: {cv.password}</span>
-                                 </div>
-                               </div>
-                               <div>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">BILL CHUYỂN KHOẢN</p>
-                                 {cv.paymentImageUrl ? (
-                                   <button 
-                                     onClick={() => setSelectedPaymentImage(cv.paymentImageUrl || null)}
-                                     className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors border border-blue-100 flex items-center gap-2 shadow-sm w-fit"
-                                   >
-                                     <ImageIcon size={14} />
-                                     <span className="text-[9px] font-black uppercase tracking-wider">Xem ảnh</span>
-                                   </button>
-                                 ) : (
-                                   <p className="text-[10px] font-medium text-slate-400 italic">Không có ảnh</p>
-                                 )}
-                               </div>
-                               
-                               <div>
-                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Người duyệt</p>
-                                 {cv.status === 'pending' ? (
-                                   <select
-                                     className="text-[10px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-blue-400 transition-colors cursor-pointer uppercase tracking-wide"
-                                     value={localReviewers[cv.id] || ''}
-                                     onChange={(e) => setLocalReviewers(prev => ({ ...prev, [cv.id]: e.target.value }))}
-                                   >
-                                     <option value="" disabled>CHỌN NGƯỜI DUYỆT</option>
-                                     {REVIEWERS.map(r => (
-                                       <option key={r} value={r}>{r}</option>
-                                     ))}
-                                   </select>
-                                 ) : (
-                                   <p className="text-[10px] font-bold text-slate-600 uppercase mt-1">{cv.processedBy || 'Chưa rõ'}</p>
-                                 )}
-                               </div>
-                               
-                               <div className="flex flex-col gap-2">
-                                 <div className="hidden sm:block">
-                                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Trạng thái</p>
-                                   <div className="flex items-center gap-2">
-                                     <p className={cn(
-                                       "text-[10px] font-black uppercase tracking-wider flex items-center gap-1",
-                                       cvFilterMapping.completed(cv) ? "text-green-600" : 
-                                       cvFilterMapping.rejected(cv) ? "text-red-600" : 
-                                       cvFilterMapping.processing(cv) ? "text-blue-600" :
-                                       "text-orange-600"
-                                     )}>
-                                       {cvFilterMapping.completed(cv) ? <><Check size={12} strokeWidth={3} /> Hoàn thành</> : 
-                                        cvFilterMapping.rejected(cv) ? <><X size={12} strokeWidth={3} /> Từ chối</> : 
-                                        cvFilterMapping.processing(cv) ? '● Đang duyệt' :
-                                        '○ Chờ duyệt'}
-                                     </p>
-                                   </div>
-                                 </div>
-                                 
-                                 <div className="flex flex-wrap items-center gap-2 mt-2">
-                                   {/* View App Approval Status / App Approver Manual Override */}
-                                   {(cv.status === 'approved' || cv.appApproved || cv.appRejectedReason) && (
-                                     <div 
-                                       className={cn(
-                                         "p-2 rounded-xl transition-all border shadow-sm flex items-center justify-center cursor-default",
-                                         cv.appApproved 
-                                           ? "bg-blue-50 text-blue-600 border-blue-100" 
-                                           : cv.appRejectedReason
-                                             ? "bg-red-50 text-red-600 border-red-100"
-                                             : "bg-slate-50 text-slate-500 border-slate-100"
-                                       )}
-                                       title={cv.appApproved ? "Đã Duyệt App" : cv.appRejectedReason ? "Đã từ chối Duyệt App" : "Chưa Duyệt App"}
-                                     >
-                                       <Smartphone size={16} strokeWidth={3} />
-                                     </div>
-                                   )}
-
-                                   {(unlockedRoles.accountant || unlockedRoles.app_approver || unlockedRoles.delete) && (
-                                     <button 
-                                       onClick={() => startEditCV(cv)}
-                                       className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
-                                       title="Sửa thông tin"
-                                     >
-                                       <Edit3 size={16} strokeWidth={3} />
-                                     </button>
-                                   )}
-
-                                   {adminCvTab === 'accountant' && cvFilterMapping.pending(cv) && (
-                                     <>
-                                       <button 
-                                        onClick={() => handleCVAction(cv.id, 'approve')}
-                                        className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-xl transition-all border border-green-100 shadow-sm"
-                                        title="Phê duyệt"
-                                       >
-                                        <Check size={16} strokeWidth={3} />
-                                       </button>
-                                       <button 
-                                        onClick={() => handleCVAction(cv.id, 'reject')}
-                                        className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
-                                        title="Từ chối"
-                                       >
-                                        <X size={16} strokeWidth={3} />
-                                       </button>
-                                     </>
-                                   )}
-
-                                   {adminCvTab === 'app_approver' && cvFilterMapping.processing(cv) && (
-                                     <>
-                                       <button 
-                                         onClick={() => {
-                                           setSelectedAppCvIds([cv.id]);
-                                           setCvActionModal({ show: true, cvId: '', type: 'bulkApproveApp' });
-                                         }}
-                                         className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl transition-all border border-blue-100 shadow-sm"
-                                         title="Duyệt App"
-                                       >
-                                         <Check size={16} strokeWidth={3} />
-                                       </button>
-                                       <button 
-                                         onClick={() => {
-                                           setSelectedAppCvIds([cv.id]);
-                                           setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' });
-                                         }}
-                                         className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
-                                         title="Từ chối App"
-                                       >
-                                         <X size={16} strokeWidth={3} />
-                                       </button>
-                                     </>
-                                   )}
-
-                                   {adminCvTab === 'app_approver' && cvFilterMapping.completed(cv) && (
-                                      <button 
-                                         onClick={() => {
-                                           setSelectedAppCvIds([cv.id]);
-                                           setCvActionModal({ show: true, cvId: '', type: 'bulkRejectApp' });
-                                         }}
-                                         className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
-                                         title="Hủy Duyệt App"
-                                      >
-                                         <X size={16} strokeWidth={3} />
-                                      </button>
-                                   )}
-
-                                   {cvFilterMapping.rejected(cv) && (
-                                     <button 
-                                      onClick={() => handleCVAction(cv.id, 'restore')}
-                                      className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
-                                      title="Khôi phục"
-                                     >
-                                      <RotateCcw size={16} strokeWidth={3} />
-                                     </button>
-                                   )}
-                                 </div>
-                               </div>
-                             </div>
-                           </div>
-                         </div>
-                       ))
-                     )}
-                     </>
-                   );
-                 })()}
+                                        </div>
+                                      );
+                                    })()
+                                  )}
+                                  </>
+                                );
+                              })()}
                           </div>
                         </>
                       )}
@@ -2713,35 +2887,42 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="bg-white rounded-[40px] pt-12 pb-10 px-8 lg:px-12 w-[calc(100vw-2rem)] max-w-md shadow-2xl relative overflow-hidden"
             >
-              <div className="absolute top-0 left-0 w-full h-2 bg-red-500" />
-              
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest">THÔNG BÁO</h3>
-                <button 
-                  onClick={() => setChromeAlert(null)}
-                  className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
+              {(() => {
+                const isSuccess = chromeAlert?.toLowerCase().includes('thành công') || chromeAlert?.includes('Đã bật') || chromeAlert?.includes('Đã xóa') || chromeAlert?.includes('Đã duyệt') || chromeAlert?.includes('Đã hủy duyệt') || chromeAlert?.includes('Đã sao chép');
+                return (
+                  <>
+                    <div className={cn("absolute top-0 left-0 w-full h-2", isSuccess ? "bg-green-500" : "bg-red-500")} />
+                    
+                    <div className="flex items-center justify-between mb-8">
+                      <h3 className="text-xl font-black text-slate-900 uppercase tracking-widest">THÔNG BÁO</h3>
+                      <button 
+                        onClick={() => setChromeAlert(null)}
+                        className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-colors"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
 
-              <div className="space-y-8">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 flex-shrink-0">
-                    <AlertCircle size={24} strokeWidth={2.5} />
-                  </div>
-                  <p className="text-sm font-medium text-slate-600 leading-relaxed pt-1">
-                    {chromeAlert}
-                  </p>
-                </div>
-                
-                <button 
-                  onClick={() => setChromeAlert(null)}
-                  className="w-full py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
-                >
-                  Đóng
-                </button>
-              </div>
+                    <div className="space-y-8">
+                      <div className="flex items-start gap-4">
+                        <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0", isSuccess ? "bg-green-50 text-green-500" : "bg-red-50 text-red-500")}>
+                          {isSuccess ? <CheckCircle2 size={24} strokeWidth={2.5} /> : <AlertCircle size={24} strokeWidth={2.5} />}
+                        </div>
+                        <p className="text-sm font-medium text-slate-600 leading-relaxed pt-1">
+                          {chromeAlert}
+                        </p>
+                      </div>
+                      
+                      <button 
+                        onClick={() => setChromeAlert(null)}
+                        className="w-full py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </motion.div>
           </div>
         )}
@@ -3611,6 +3792,59 @@ export default function App() {
                   className="w-full py-4 bg-slate-50 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-yellow-50 hover:text-yellow-700 transition-all"
                 >
                   Quay về hôm nay
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Role Unlock Modal */}
+      <AnimatePresence>
+        {isAdmin && activeAdminTab === 'cvs' && adminCvTab !== 'status' && !unlockedRoles[adminCvTab as keyof typeof unlockedRoles] && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-[40px] p-10 max-w-sm w-full shadow-2xl border border-yellow-200 text-center relative"
+            >
+              <button 
+                onClick={() => {
+                  setAdminCvTab('status');
+                  setRolePasswords({ ...rolePasswords, [adminCvTab]: '' });
+                }}
+                className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors bg-slate-100 hover:bg-slate-200 p-2 rounded-full"
+              >
+                <X size={20} />
+              </button>
+              
+              <div className="w-20 h-20 bg-slate-50 flex items-center justify-center rounded-3xl mx-auto mb-6 shadow-inset border border-slate-100">
+                <Lock size={32} className="text-slate-300" />
+              </div>
+              <h4 className="font-black text-slate-800 text-xl tracking-tight mb-2 uppercase">Yêu cầu mở khóa</h4>
+              <p className="text-sm text-slate-500 font-medium mb-8">
+                Bạn cần cung cấp mật khẩu để truy cập không gian làm việc của <strong className="text-slate-800">{
+                  adminCvTab === 'accountant' ? 'Kế toán' :
+                  adminCvTab === 'app_approver' ? 'Duyệt App' : 'Xóa CV'
+                }</strong>.
+              </p>
+              <div className="space-y-4">
+                <input 
+                  type="password"
+                  placeholder="Nhập mã PIN..."
+                  autoFocus
+                  value={rolePasswords[adminCvTab as 'accountant' | 'app_approver' | 'delete']}
+                  onChange={e => setRolePasswords({ ...rolePasswords, [adminCvTab]: e.target.value })}
+                  onKeyDown={e => e.key === 'Enter' && handleRoleUnlock(adminCvTab as 'accountant' | 'app_approver' | 'delete')}
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-200 focus:border-blue-400 outline-none rounded-2xl font-bold text-slate-800 text-center tracking-widest shadow-inner transition-all"
+                />
+                <button 
+                  onClick={() => handleRoleUnlock(adminCvTab as 'accountant' | 'app_approver' | 'delete')}
+                  disabled={!rolePasswords[adminCvTab as 'accountant' | 'app_approver' | 'delete']}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  Mở khóa
                 </button>
               </div>
             </motion.div>
