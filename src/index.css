@@ -39,3 +39,45 @@
     @apply bg-slate-50 text-slate-800 font-sans;
   }
 }
+
+/* Mobile responsive refinements */
+@media (max-width: 768px) {
+  /* Scale up very small text on mobile */
+  .text-\[8px\], .text-\[9px\] { font-size: 11px !important; }
+  .text-\[10px\], .text-\[11px\] { font-size: 13px !important; }
+  .text-xs { font-size: 14px !important; }
+  
+  /* Ensure form inputs have at least 16px to prevent iOS auto-zoom */
+  input[type="text"], 
+  input[type="password"], 
+  input[type="number"],
+  input[type="email"],
+  textarea, 
+  select {
+    font-size: 16px !important;
+    min-height: 48px;
+  }
+  
+  /* Improve touch targets for buttons generally, except those intentionally small/square */
+  button:not(.w-10):not(.w-8):not(.h-10):not(.h-8) {
+    min-height: 44px;
+  }
+
+  /* Compact padding for cards on mobile */
+  .p-12, .p-10 {
+    padding: 1.5rem !important;
+  }
+  .p-8, .p-6 {
+    padding: 1.25rem !important;
+  }
+  
+  /* Give more breathing room on mobile */
+  .px-8 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  
+  .gap-6 {
+    gap: 1rem !important;
+  }
+}
