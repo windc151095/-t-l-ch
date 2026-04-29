@@ -1718,21 +1718,21 @@ export default function App() {
                   <p className="text-slate-500 mt-1 font-medium">{format(selectedDate, 'EEEE, d MMMM yyyy', { locale: vi })}</p>
                 </div>
 
-                <div className="flex bg-slate-100 p-1 rounded-2xl">
+                <div className="flex flex-wrap items-center gap-2">
                   {[
-                    { id: 'appointments', label: 'Lịch hẹn', icon: <CalendarDays size={16} /> },
-                    { id: 'config', label: 'Cấu hình lịch hẹn', icon: <Clock size={16} /> },
-                    { id: 'cancelled', label: 'Hủy lịch', icon: <Trash2 size={16} /> },
-                    { id: 'cvs', label: 'Quản lý CV', icon: <FileText size={16} /> },
+                    { id: 'appointments', label: 'Lịch hẹn', icon: <CalendarDays size={16} />, activeColor: "bg-blue-100 text-blue-700 border-blue-200" },
+                    { id: 'config', label: 'Cấu hình lịch hẹn', icon: <Clock size={16} />, activeColor: "bg-purple-100 text-purple-700 border-purple-200" },
+                    { id: 'cancelled', label: 'Hủy lịch', icon: <Trash2 size={16} />, activeColor: "bg-red-100 text-red-700 border-red-200" },
+                    { id: 'cvs', label: 'Quản lý CV', icon: <FileText size={16} />, activeColor: "bg-green-100 text-green-700 border-green-200" },
                   ].map(tab => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveAdminTab(tab.id as any)}
                       className={cn(
-                        "flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
+                        "flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border",
                         activeAdminTab === tab.id 
-                          ? "bg-white text-slate-900 shadow-sm" 
-                          : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+                          ? tab.activeColor 
+                          : "bg-slate-50 border-slate-100 text-slate-500 hover:text-slate-700 hover:border-slate-200 hover:bg-slate-100 shadow-sm"
                       )}
                     >
                       {tab.icon}
