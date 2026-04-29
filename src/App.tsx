@@ -56,7 +56,8 @@ import {
   Smartphone,
   List,
   CircleDollarSign,
-  Copy
+  Copy,
+  ShieldAlert
 } from 'lucide-react';
 import { 
   collection, 
@@ -912,7 +913,7 @@ export default function App() {
       return unlockedRoles.accountant;
     }
     if (cvActionModal.type === 'approve') return unlockedRoles.accountant;
-    if (cvActionModal.type === 'bulkApproveApp' || cvActionModal.type === 'bulkRejectApp') return unlockedRoles.app_approver;
+    if (cvActionModal.type === 'bulkApproveApp' || cvActionModal.type === 'bulkRejectApp' || cvActionModal.type === 'approveApp') return unlockedRoles.app_approver;
     if (cvActionModal.type === 'bulkDeleteCv') return unlockedRoles.delete;
     return false;
   };
@@ -930,7 +931,7 @@ export default function App() {
       }
     } else if (cvActionModal.type === 'approve') {
       requiredPin = '1111';
-    } else if (cvActionModal.type === 'bulkApproveApp') {
+    } else if (cvActionModal.type === 'bulkApproveApp' || cvActionModal.type === 'approveApp') {
       requiredPin = '2222';
     } else if (cvActionModal.type === 'bulkDeleteCv') {
       requiredPin = '6868';
@@ -2273,7 +2274,6 @@ export default function App() {
                         </div>
                       ) : (
                         <>
-
                           {adminCvTab === 'app_approver' && statusSubFilter === 'processing' && (
                             <div className="flex items-center gap-3">
                               <button 
@@ -2474,7 +2474,7 @@ export default function App() {
                                      </div>
                                    )}
 
-                                   {(!cv.appApproved && (adminCvTab !== 'app_approver' || !cvFilterMapping.pending(cv)) || isAdmin) && (
+                                   {(unlockedRoles.accountant || unlockedRoles.app_approver || unlockedRoles.delete) && (
                                      <button 
                                        onClick={() => startEditCV(cv)}
                                        className="p-2 bg-slate-50 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all border border-slate-100 hover:border-blue-100 shadow-sm"
