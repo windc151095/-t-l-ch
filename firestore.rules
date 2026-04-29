@@ -143,5 +143,10 @@ service cloud.firestore {
       );
       allow delete: if isAdmin() || true; // In demo mode, allow deletion for simplify
     }
+    // Courses Collection
+    match /courses/{courseId} {
+      allow read, write: if true;
+    }
+
   }
 }
