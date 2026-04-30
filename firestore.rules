@@ -47,21 +47,21 @@ service cloud.firestore {
     }
 
     function isValidCV(data) {
-      return data.keys().hasAll(['fullName', 'phone', 'phoneLast4', 'age', 'guideName', 'guidePhoneLast4', 'password', 'status', 'createdAt'])
-        && data.keys().size() <= 25
+      return data.keys().hasAll(['fullName', 'age', 'guideName', 'password', 'status', 'createdAt'])
+        && data.keys().size() <= 30
         && data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 200
-        && data.phone is string && data.phone.size() > 0 && data.phone.size() <= 20
-        && data.phoneLast4 is string && data.phoneLast4.size() == 4
+        && data.get('phone', '') is string
+        && data.get('phoneLast4', '') is string
         && data.age is string && data.age.size() > 0 && data.age.size() <= 10
         && data.guideName is string && data.guideName.size() > 0 && data.guideName.size() <= 200
-        && data.guidePhoneLast4 is string && data.guidePhoneLast4.size() == 4
+        && data.get('guidePhoneLast4', '') is string
         && data.password is string && data.password.size() >= 4 && data.password.size() <= 50
         && data.get('address', '') is string
         && data.get('job', '') is string
         && data.get('target', '') is string
         && data.get('paymentImageUrl', '') is string
         && data.get('processedBy', '') is string
-        && (request.method == 'create' ? data.status == 'pending' && data.createdAt == request.time : true)
+        && (request.method == 'create' ? (data.status == 'pending' || data.status == 'approved') && data.createdAt == request.time : true)
         && (data.status == 'pending' || data.status == 'approved' || data.status == 'rejected');
     }
 

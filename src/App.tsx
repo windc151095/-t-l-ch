@@ -64,7 +64,7 @@ import {
   SlidersHorizontal,
   ArrowLeft,
   Sparkles,
-  Plus
+  RefreshCw
 } from 'lucide-react';
 import { 
   collection, 
@@ -154,6 +154,8 @@ interface CV {
   companion?: string;
   studentId?: string;
   studyGroup?: string;
+  previousCourse?: string;
+  type?: 'reenroll';
 }
 
 // --- Constants ---
@@ -226,10 +228,10 @@ export default function App() {
   const [cvs, setCvs] = useState<CV[]>([]);
   const [showCVModal, setShowCVModal] = useState(false);
   const [editingCvId, setEditingCvId] = useState<string | null>(null);
-  const [cvModalTab, setCvModalTab] = useState<'search' | 'create'>('create');
+  const [cvModalTab, setCvModalTab] = useState<'search' | 'create' | 'reenroll'>('create');
   const [cvSearchPIN, setCvSearchPIN] = useState('');
   const [cvSearchPhoneLast4, setCvSearchPhoneLast4] = useState('');
-  const [foundCV, setFoundCV] = useState<CV | null>(null);
+  const [foundCVs, setFoundCVs] = useState<CV[]>([]);
   const [isSearchingCV, setIsSearchingCV] = useState(false);
   const [isSubmittingCV, setIsSubmittingCV] = useState(false);
   const [showCVSaveSuccess, setShowCVSaveSuccess] = useState(false);
@@ -244,9 +246,14 @@ export default function App() {
     guideName: '',
     guidePhoneLast4: '',
     password: '',
-    paymentImageUrl: ''
+    paymentImageUrl: '',
+    previousCourse: ''
   });
   const [rolePasswords, setRolePasswords] = useState({ accountant: '', app_approver: '', delete: '', learning: '' });
+  const [dbRolePasswords, setDbRolePasswords] = useState({ accountant: '1111', app_approver: '2222', delete: '6868', learning: '123456' });
+  const [configTab, setConfigTab] = useState<'schedule' | 'passwords'>('schedule');
+  const [adminSetupPassword, setAdminSetupPassword] = useState('');
+  const [editingPasswords, setEditingPasswords] = useState({ accountant: '', app_approver: '', delete: '', learning: '' });
   const [unlockedRoles, setUnlockedRoles] = useState({ accountant: false, app_approver: false, delete: false, learning: false });
   const [adminCvTab, setAdminCvTab] = useState<'status' | 'accountant' | 'app_approver' | 'delete' | 'learning'>('status');
   const [statusSubFilter, setStatusSubFilter] = useState<'all' | 'pending' | 'processing' | 'completed' | 'rejected'>('all');
@@ -262,6 +269,7 @@ export default function App() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [courseDetailTab, setCourseDetailTab] = useState<'companion' | 'group'>('companion');
+  const [assignFilter, setAssignFilter] = useState<string>('all');
   const [selectedStudentIdsForAssign, setSelectedStudentIdsForAssign] = useState<string[]>([]);
   const [bulkAssignInput, setBulkAssignInput] = useState('');
   const [newEntityName, setNewEntityName] = useState('');
@@ -396,6 +404,10 @@ export default function App() {
         const data = snapshot.data();
         setSlotDuration(data.slotDuration || 30);
         setAnnouncement(data.announcement || '');
+        if (data.passwords) {
+          setDbRolePasswords(data.passwords);
+          setEditingPasswords(data.passwords);
+        }
         if (data.businessHours && Array.isArray(data.businessHours)) {
           setBusinessHours(data.businessHours);
         } else if (data.businessHours && !Array.isArray(data.businessHours)) {
@@ -746,7 +758,7 @@ export default function App() {
       return;
     }
     setIsSearchingCV(true);
-    setFoundCV(null);
+    setFoundCVs([]);
     try {
       const q = query(collection(db, 'cvs'));
       const querySnapshot = await getDocs(q);
@@ -759,12 +771,11 @@ export default function App() {
         const dbPin = data.password ? String(data.password).trim() : '';
         
         const matchesPhone = dbPhoneLast4 === searchPhoneInfo || (dbPhone.length >= 4 && dbPhone.endsWith(searchPhoneInfo)) || dbGuidePhoneLast4 === searchPhoneInfo;
-        console.log("Checking CV:", data.fullName, "dbPhoneLast4:", dbPhoneLast4, "searchPhoneInfo:", searchPhoneInfo, "dbPin:", dbPin, "searchPIN:", searchPIN, "matchesPhone:", matchesPhone);
         return matchesPhone && dbPin === searchPIN;
       });
       
       if (foundDocs.length > 0) {
-        setFoundCV({ id: foundDocs[0].id, ...foundDocs[0].data() } as CV);
+        setFoundCVs(foundDocs.map(doc => ({ id: doc.id, ...doc.data() } as CV)));
       } else {
         setChromeAlert("Thông tin 4 số điện thoại và mã pin không chính xác.");
       }
@@ -881,21 +892,33 @@ export default function App() {
 
   const handleCVSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isReenroll = cvModalTab === 'reenroll';
+
     if (cvFormData.password.trim().length < 4) {
       setChromeAlert("Mã PIN phải tối thiểu 4 ký tự.");
       return;
     }
     const safeFullName = cvFormData.fullName.trim();
     const safePhone = cvFormData.phone.trim();
-    if (!safeFullName || !safePhone || !cvFormData.age || !cvFormData.guideName || !cvFormData.guidePhoneLast4) {
-      setChromeAlert("Vui lòng điền đầy đủ các trường bắt buộc (1, 2, 3, 7, 8).");
+    
+    if (!safeFullName || !safePhone || !cvFormData.age || !cvFormData.guideName || (!isReenroll && !cvFormData.guidePhoneLast4)) {
+      setChromeAlert("Vui lòng điền đầy đủ các trường bắt buộc.");
+      return;
+    }
+    if (isReenroll && !cvFormData.previousCourse) {
+      setChromeAlert("Vui lòng nhập khóa trước đã tham gia.");
+      return;
+    }
+
+    if (!isReenroll && !cvFormData.paymentImageUrl) {
+      setChromeAlert("Vui lòng tải lên Ảnh chuyển khoản thành công.");
       return;
     }
     if (safePhone.replace(/\D/g, '').length < 4) {
       setChromeAlert("Số điện thoại học viên phải có ít nhất 4 chữ số.");
       return;
     }
-    if (cvFormData.guidePhoneLast4.trim().length !== 4) {
+    if (!isReenroll && cvFormData.guidePhoneLast4.trim().length !== 4) {
       setChromeAlert("Trường số 8 phải là đúng 4 số cuối của SĐT.");
       return;
     }
@@ -914,7 +937,7 @@ export default function App() {
         };
         
         if (existingCv?.status === 'rejected') {
-          updatedData.status = 'pending';
+          updatedData.status = isReenroll ? 'approved' : 'pending';
           updatedData.cancellationReason = deleteField();
         }
         
@@ -932,14 +955,16 @@ export default function App() {
           password: cvFormData.password.trim(),
           guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
           phoneLast4,
-          status: 'pending',
+          status: isReenroll ? 'approved' : 'pending',
+          appApproved: isReenroll ? true : undefined,
+          type: isReenroll ? 'reenroll' : 'new',
           createdAt: serverTimestamp()
         });
       }
-      setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', password: '', paymentImageUrl: '', guideName: '', guidePhoneLast4: '' });
+      setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', password: '', paymentImageUrl: '', guideName: '', guidePhoneLast4: '', previousCourse: '' });
       setCvAutoFillText('');
       setEditingCvId(null);
-      setCvModalTab('create');
+      setCvModalTab(isReenroll ? 'reenroll' : 'create');
       setShowCVSaveSuccess(true);
       if (editingCvId) {
         setChromeAlert("Cập nhật CV thành công!");
@@ -1022,24 +1047,24 @@ export default function App() {
   const confirmCVAction = async () => {
     if (!isAdmin || !cvActionModal.type) return;
 
-    let requiredPin = '123456';
+    let requiredPin = dbRolePasswords.learning;
     if (cvActionModal.type === 'restore') {
       const cvToRestore = cvs.find(c => c.id === cvActionModal.cvId);
       if (cvToRestore?.appRejectedReason) {
-        requiredPin = '2222';
+        requiredPin = dbRolePasswords.app_approver;
       } else {
-        requiredPin = '1111';
+        requiredPin = dbRolePasswords.accountant;
       }
     } else if (cvActionModal.type === 'approve') {
-      requiredPin = '1111';
+      requiredPin = dbRolePasswords.accountant;
     } else if (cvActionModal.type === 'bulkApproveApp' || cvActionModal.type === 'approveApp') {
-      requiredPin = '2222';
+      requiredPin = dbRolePasswords.app_approver;
     } else if (cvActionModal.type === 'bulkDeleteCv') {
-      requiredPin = '6868';
+      requiredPin = dbRolePasswords.delete;
     }
     
     // modal is used for restore and app actions
-    if (cvActionModal.type !== 'bulkRejectApp' && cvActionModal.type !== 'reject' && !isActionUnlocked() && adminPinInput !== requiredPin && adminPinInput !== '123456') {
+    if (cvActionModal.type !== 'bulkRejectApp' && cvActionModal.type !== 'reject' && !isActionUnlocked() && adminPinInput !== requiredPin && adminPinInput !== dbRolePasswords.learning) {
       setChromeAlert("Mật khẩu không chính xác!");
       return;
     }
@@ -1135,13 +1160,7 @@ export default function App() {
   };
 
   const handleRoleUnlock = (role: 'accountant' | 'app_approver' | 'delete' | 'learning') => {
-    const passwords = {
-      accountant: '1111',
-      app_approver: '2222',
-      delete: '6868',
-      learning: '123456'
-    };
-    if (rolePasswords[role] === passwords[role]) {
+    if (rolePasswords[role] === dbRolePasswords[role]) {
       setUnlockedRoles(prev => ({ ...prev, [role]: true }));
       setChromeAlert("Mở khóa thành công!");
     } else {
@@ -1161,11 +1180,11 @@ export default function App() {
       if (adminCvTab === 'learning') return true;
       
       // Tab filtering
-      if (statusSubFilter === 'all') return true;
-      if (statusSubFilter === 'pending') return cvFilterMapping.pending(c);
-      if (statusSubFilter === 'processing') return cvFilterMapping.processing(c);
-      if (statusSubFilter === 'completed') return cvFilterMapping.completed(c);
-      if (statusSubFilter === 'rejected') return cvFilterMapping.rejected(c);
+      if (statusSubFilter === 'all') return adminCvTab === 'delete' ? true : c.type !== 'reenroll';
+      if (statusSubFilter === 'pending') return cvFilterMapping.pending(c) && c.type !== 'reenroll';
+      if (statusSubFilter === 'processing') return cvFilterMapping.processing(c) && c.type !== 'reenroll';
+      if (statusSubFilter === 'completed') return cvFilterMapping.completed(c) && c.type !== 'reenroll';
+      if (statusSubFilter === 'rejected') return cvFilterMapping.rejected(c) && c.type !== 'reenroll';
       return true;
     });
   };
@@ -1866,7 +1885,7 @@ export default function App() {
                 <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                   {[
                     { id: 'appointments', label: 'Lịch hẹn', icon: <CalendarDays size={16} />, activeColor: "bg-blue-100 text-blue-700 border-blue-200" },
-                    { id: 'config', label: 'Cấu hình lịch hẹn', icon: <Clock size={16} />, activeColor: "bg-purple-100 text-purple-700 border-purple-200" },
+                    { id: 'config', label: 'Cấu hình', icon: <Clock size={16} />, activeColor: "bg-purple-100 text-purple-700 border-purple-200" },
                     { id: 'cancelled', label: 'Hủy lịch', icon: <Trash2 size={16} />, activeColor: "bg-red-100 text-red-700 border-red-200" },
                     { id: 'cvs', label: 'Quản lý CV', icon: <FileText size={16} />, activeColor: "bg-green-100 text-green-700 border-green-200" },
                   ].map(tab => (
@@ -1897,8 +1916,28 @@ export default function App() {
               <div className="space-y-12">
                 {activeAdminTab === 'config' && (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-                    {/* 1. Khung mặc định (Global settings) */}
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
+                    {/* Config Sub-tabs */}
+                    <div className="flex bg-slate-100 p-1.5 rounded-[20px] max-w-sm">
+                      <button
+                        onClick={() => setConfigTab('schedule')}
+                        className={cn("flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-[16px] transition-all",
+                          configTab === 'schedule' ? "bg-white text-blue-700 shadow-sm" : "text-slate-400 hover:text-slate-600")}
+                      >
+                        Lịch hẹn
+                      </button>
+                      <button
+                        onClick={() => setConfigTab('passwords')}
+                        className={cn("flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-[16px] transition-all",
+                          configTab === 'passwords' ? "bg-white text-purple-700 shadow-sm" : "text-slate-400 hover:text-slate-600")}
+                      >
+                        Mật khẩu
+                      </button>
+                    </div>
+
+                    {configTab === 'schedule' && (
+                      <div className="space-y-8">
+                        {/* 1. Khung mặc định (Global settings) */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-yellow-400 flex items-center justify-center text-amber-950">
                           <Settings size={20} />
@@ -2166,7 +2205,100 @@ export default function App() {
                              </div>
                           </div>
                        </div>
+                     </div>
                     </div>
+                  )}
+
+                  {configTab === 'passwords' && (
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-purple-100 flex items-center justify-center text-purple-700">
+                          <Lock size={20} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-black text-slate-900 tracking-tight">Thiết lập Mật khẩu Quyền truy cập</h3>
+                          <p className="text-xs text-slate-400 font-medium italic">Thay đổi mật khẩu cho từng vai trò quản lý CV</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Kế toán */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Kế toán</label>
+                          <input type="text"
+                            value={editingPasswords.accountant}
+                            onChange={(e) => setEditingPasswords({ ...editingPasswords, accountant: e.target.value })}
+                            className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm tracking-wide"
+                            placeholder="Mật khẩu kế toán"
+                          />
+                        </div>
+
+                        {/* Duyệt App */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Duyệt App</label>
+                          <input type="text"
+                            value={editingPasswords.app_approver}
+                            onChange={(e) => setEditingPasswords({ ...editingPasswords, app_approver: e.target.value })}
+                            className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm tracking-wide"
+                            placeholder="Mật khẩu duyệt app"
+                          />
+                        </div>
+
+                        {/* Học tập */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Học tập</label>
+                          <input type="text"
+                            value={editingPasswords.learning}
+                            onChange={(e) => setEditingPasswords({ ...editingPasswords, learning: e.target.value })}
+                            className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm tracking-wide"
+                            placeholder="Mật khẩu học tập"
+                          />
+                        </div>
+
+                        {/* Xóa CV */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Xóa App</label>
+                          <input type="text"
+                            value={editingPasswords.delete}
+                            onChange={(e) => setEditingPasswords({ ...editingPasswords, delete: e.target.value })}
+                            className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-red-400 transition-all font-bold text-sm tracking-wide"
+                            placeholder="Mật khẩu xóa app"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-8 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                        <div className="space-y-2 flex-1">
+                          <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest px-1">Mật khẩu xác nhận Admin</label>
+                          <input type="password"
+                            value={adminSetupPassword}
+                            onChange={(e) => setAdminSetupPassword(e.target.value)}
+                            className="w-full max-w-[200px] px-5 py-3 bg-amber-50 border border-amber-200 rounded-2xl outline-none focus:bg-white focus:border-amber-400 transition-all font-black text-sm tracking-widest"
+                            placeholder="****"
+                          />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (adminSetupPassword !== '6868') {
+                              setChromeAlert('Mật khẩu Admin không chính xác!');
+                              return;
+                            }
+                            try {
+                              await setDoc(doc(db, 'settings', 'global'), { passwords: editingPasswords }, { merge: true });
+                              setAdminSetupPassword('');
+                              setChromeAlert('Lưu mật khẩu thành công!');
+                            } catch (error) {
+                              setChromeAlert('Có lỗi xảy ra, vui lòng thử lại.');
+                            }
+                          }}
+                          className="w-full sm:w-auto px-8 py-4 bg-amber-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-black transition-all shadow-xl shadow-amber-900/20 active:scale-95"
+                        >
+                          Lưu Thay Đổi
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   </motion.div>
                 )}
 
@@ -2606,414 +2738,6 @@ export default function App() {
 
                           <div className="grid grid-cols-1 gap-4">
                             {(() => {
-                              if (adminCvTab === 'learning' && !selectedCourseId) {
-                                return (
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {courses.map(course => (
-                                      <div key={course.id} className="bg-white p-6 rounded-[2rem] border border-purple-100 shadow-sm hover:shadow-xl transition-all relative group cursor-pointer" onClick={() => setSelectedCourseId(course.id)}>
-                                        <div className="w-12 h-12 bg-purple-50 flex items-center justify-center rounded-2xl mb-4 text-purple-600">
-                                          <GraduationCap size={24} />
-                                        </div>
-                                        <h4 className="font-black text-slate-800 text-lg mb-2">{course.name}</h4>
-                                        <div className="space-y-1 mb-4">
-                                          <p className="text-xs font-bold text-slate-500">
-                                            Thời gian: {format(new Date(course.startDate), 'dd/MM/yyyy')} - {format(new Date(course.endDate), 'dd/MM/yyyy')}
-                                          </p>
-                                          <p className="text-xs font-bold text-red-500">
-                                            Ngày chốt: {format(new Date(course.closingDate), 'dd/MM/yyyy')}
-                                          </p>
-                                        </div>
-                                        <div className="flex items-center gap-2 pt-4 border-t border-slate-50">
-                                          <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-black uppercase tracking-widest">
-                                            {course.studentIds.length} Học viên
-                                          </span>
-                                        </div>
-                                      </div>
-                                    ))}
-                                    {courses.length === 0 && (
-                                      <div className="col-span-full py-12 text-center text-slate-500 font-medium">
-                                        Chưa có khóa học nào.
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              }
-
-                              if (adminCvTab === 'learning' && selectedCourseId) {
-                                const course = courses.find(c => c.id === selectedCourseId);
-                                if (!course) return null;
-                                const enrolledCvs = cvs.filter(c => course.studentIds.includes(c.id));
-                                return (
-                                  <div className="space-y-4">
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 gap-4">
-                                      <div className="flex items-center gap-4">
-                                        <button 
-                                          onClick={() => setSelectedCourseId(null)}
-                                          className="p-2 bg-slate-50 text-slate-500 hover:text-slate-800 rounded-xl transition-colors"
-                                        >
-                                          <ArrowLeft size={20} />
-                                        </button>
-                                        <div>
-                                          <h3 className="font-black text-slate-800 text-lg flex items-center gap-3">
-                                            {course.name}
-                                            <div className="flex gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
-                                              <button 
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setCourseForm({
-                                                    name: course.name,
-                                                    start: course.startDate,
-                                                    end: course.endDate,
-                                                    closingDate: course.closingDate
-                                                  });
-                                                  setEditingCourseId(course.id);
-                                                  setSelectedLearningCvIds(course.studentIds);
-                                                  setShowCreateCourseModal(true);
-                                                }}
-                                                className="p-1.5 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors"
-                                              >
-                                                <Edit3 size={16} />
-                                              </button>
-                                              <button 
-                                                onClick={async (e) => {
-                                                  e.stopPropagation();
-                                                  if(window.confirm('Bạn có chắc muốn xóa khóa học này?')) {
-                                                    await deleteDoc(doc(db, 'courses', course.id));
-                                                    setSelectedCourseId(null);
-                                                  }
-                                                }}
-                                                className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                                              >
-                                                <Trash2 size={16} />
-                                              </button>
-                                            </div>
-                                          </h3>
-                                          <p className="text-xs font-bold text-slate-500">{enrolledCvs.length} Học viên</p>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <button 
-                                          onClick={async () => {
-                                            if (!window.confirm("Tạo mã học viên định dạng HV-001 tự động xếp theo Người Đồng Hành?")) return;
-                                            
-                                            // Sort by Companion -> Name
-                                            const sorted = [...enrolledCvs].sort((a, b) => {
-                                              const cA = a.companion || 'ZZZ';
-                                              const cB = b.companion || 'ZZZ';
-                                              if (cA !== cB) return cA.localeCompare(cB);
-                                              return a.fullName.localeCompare(b.fullName);
-                                            });
-
-                                            try {
-                                              await Promise.all(sorted.map((cv, index) => {
-                                                const idNum = (index + 1).toString().padStart(3, '0');
-                                                const studentId = `HV-${idNum}`;
-                                                return updateDoc(doc(db, 'cvs', cv.id), { studentId });
-                                              }));
-                                              setChromeAlert("Đã tạo mã học viên thành công!");
-                                            } catch (e) {
-                                              console.error(e);
-                                            }
-                                          }}
-                                          className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl hover:bg-purple-100 transition-all text-xs font-black uppercase tracking-widest"
-                                        >
-                                          <Sparkles size={16} />
-                                          Tạo Mã HV
-                                        </button>
-                                        <button 
-                                          onClick={async () => {
-                                            const { utils, writeFile } = await import('xlsx');
-                                            const formatCVData = (items: CV[]) => items.map((cv, index) => ({
-                                              'STT': index + 1,
-                                              'Ngày tạo CV': cv.createdAt ? format(cv.createdAt.toDate ? cv.createdAt.toDate() : (typeof cv.createdAt === 'number' ? new Date(cv.createdAt) : new Date(cv.createdAt)), 'dd/MM/yyyy HH:mm') : '',
-                                              'Người đồng hành': cv.companion || '',
-                                              'Mã học viên': cv.studentId || '',
-                                              'Họ tên': cv.fullName,
-                                              'Tuổi': cv.age,
-                                              'Hướng dẫn viên': cv.guideName,
-                                              'Group học tập': cv.studyGroup || ''
-                                            }));
-                                            const ws = utils.json_to_sheet(formatCVData(enrolledCvs));
-                                            const wb = utils.book_new();
-                                            utils.book_append_sheet(wb, ws, "Khóa Học");
-                                            writeFile(wb, `KhoaHoc_${course.name}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
-                                          }}
-                                          className="flex items-center gap-2 px-4 py-2.5 bg-green-50 text-green-700 border border-green-200 rounded-xl hover:bg-green-100 transition-all text-xs font-black uppercase tracking-widest"
-                                        >
-                                          <Download size={16} />
-                                          Xuất Excel
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <div className="flex flex-col lg:flex-row gap-6">
-                                      {/* Left Tabs pane */}
-                                      <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2">
-                                        <button 
-                                          onClick={() => { setCourseDetailTab('companion'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); }}
-                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'companion' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
-                                        >
-                                          Phân bổ Người đồng hành
-                                        </button>
-                                        <button 
-                                          onClick={() => { setCourseDetailTab('group'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); }}
-                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'group' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
-                                        >
-                                          Phân bổ Group học tập
-                                        </button>
-                                      </div>
-
-                                      {/* Right Content pane */}
-                                      <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-6">
-                                        {/* Management Section */}
-                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
-                                          <h4 className="font-bold text-slate-800 text-sm">
-                                            {courseDetailTab === 'companion' ? 'Danh sách Người đồng hành' : 'Danh sách Group học tập'}
-                                          </h4>
-                                          <div className="flex gap-2">
-                                            <input
-                                              type="text"
-                                              placeholder={courseDetailTab === 'companion' ? "Tên người đồng hành mới..." : "Tên Group học tập mới..."}
-                                              value={newEntityName}
-                                              onChange={e => setNewEntityName(e.target.value)}
-                                              className="flex-1 w-full border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
-                                            />
-                                            <button
-                                              onClick={async () => {
-                                                if (!newEntityName.trim()) return;
-                                                const field = courseDetailTab === 'companion' ? 'companions' : 'studyGroups';
-                                                const currentList = course[field] || [];
-                                                if (!currentList.includes(newEntityName.trim())) {
-                                                  await updateDoc(doc(db, 'courses', course.id), {
-                                                    [field]: [...currentList, newEntityName.trim()]
-                                                  });
-                                                  setNewEntityName('');
-                                                } else {
-                                                  setChromeAlert("Tên này đã tồn tại!");
-                                                }
-                                              }}
-                                              className="px-6 py-2 bg-purple-600 shrink-0 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-200"
-                                            >
-                                              Tạo mới
-                                            </button>
-                                          </div>
-                                          
-                                          {/* Tags of created entities */}
-                                          <div className="flex flex-wrap gap-2 mt-2">
-                                            {(courseDetailTab === 'companion' ? (course.companions || []) : (course.studyGroups || [])).map(item => (
-                                              <div key={item} className={cn("flex items-center gap-1.5 px-3 py-1 bg-white border rounded-lg text-xs font-bold shadow-sm", getColorForString(item))}>
-                                                {item}
-                                                <button 
-                                                  onClick={async () => {
-                                                    if (window.confirm(`Xóa ${item} khỏi danh sách?`)) {
-                                                      const field = courseDetailTab === 'companion' ? 'companions' : 'studyGroups';
-                                                      const currentList = course[field] || [];
-                                                      await updateDoc(doc(db, 'courses', course.id), {
-                                                        [field]: currentList.filter(i => i !== item)
-                                                      });
-                                                    }
-                                                  }}
-                                                  className="text-slate-400 hover:text-red-500 transition-colors text-lg leading-none"
-                                                >
-                                                  &times;
-                                                </button>
-                                              </div>
-                                            ))}
-                                            {(courseDetailTab === 'companion' ? (course.companions || []) : (course.studyGroups || [])).length === 0 && (
-                                              <span className="text-xs text-slate-400">Chưa có dữ liệu. Hãy tạo mới ở trên.</span>
-                                            )}
-                                          </div>
-                                        </div>
-
-                                        {courseDetailTab === 'companion' ? (
-                                          <div className="space-y-4">
-                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                              <div className="flex items-center gap-3">
-                                                <input 
-                                                  type="checkbox"
-                                                  className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
-                                                  checked={selectedStudentIdsForAssign.length === enrolledCvs.length && enrolledCvs.length > 0}
-                                                  onChange={(e) => {
-                                                    if (e.target.checked) setSelectedStudentIdsForAssign(enrolledCvs.map(c => c.id));
-                                                    else setSelectedStudentIdsForAssign([]);
-                                                  }}
-                                                />
-                                                <span className="text-sm font-bold text-slate-700">Chọn tất cả ({selectedStudentIdsForAssign.length}/{enrolledCvs.length})</span>
-                                              </div>
-                                              <div className="flex gap-2 w-full md:w-auto">
-                                                <select 
-                                                  value={bulkAssignInput}
-                                                  onChange={e => setBulkAssignInput(e.target.value)}
-                                                  className="flex-1 min-w-[200px] border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
-                                                >
-                                                  <option value="">-- Chọn Người đồng hành --</option>
-                                                  {(course.companions || []).map(c => (
-                                                    <option key={c} value={c}>{c}</option>
-                                                  ))}
-                                                </select>
-                                                <button 
-                                                  onClick={async () => {
-                                                    if (!bulkAssignInput.trim() || selectedStudentIdsForAssign.length === 0) return;
-                                                    try {
-                                                      await Promise.all(selectedStudentIdsForAssign.map(id => updateDoc(doc(db, 'cvs', id), { companion: bulkAssignInput.trim() })));
-                                                      setBulkAssignInput('');
-                                                      setSelectedStudentIdsForAssign([]);
-                                                      setChromeAlert("Đã phân bổ Người đồng hành thành công!");
-                                                    } catch (e) {
-                                                      console.error(e);
-                                                    }
-                                                  }}
-                                                  className="px-6 py-2 bg-purple-600 shrink-0 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-200"
-                                                >
-                                                  Phân bổ
-                                                </button>
-                                              </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto pr-2">
-                                              {enrolledCvs.sort((a,b) => {
-                                                const compA = a.companion || 'ZZZ';
-                                                const compB = b.companion || 'ZZZ';
-                                                if (compA !== compB) return compA.localeCompare(compB);
-                                                return a.fullName.localeCompare(b.fullName);
-                                              }).map(cv => (
-                                                <div key={cv.id} onClick={() => {
-                                                  setSelectedStudentIdsForAssign(prev => prev.includes(cv.id) ? prev.filter(i => i !== cv.id) : [...prev, cv.id]);
-                                                }} className={cn("cursor-pointer border rounded-xl p-3 flex gap-3 transition-all", selectedStudentIdsForAssign.includes(cv.id) ? "border-purple-400 bg-purple-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50")}>
-                                                  <input 
-                                                    type="checkbox"
-                                                    className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 mt-0.5 pointer-events-none"
-                                                    checked={selectedStudentIdsForAssign.includes(cv.id)}
-                                                    readOnly
-                                                  />
-                                                  <div className="flex-1 min-w-0">
-                                                    <p className="font-bold text-slate-800 text-sm mb-1 truncate" title={cv.fullName}>
-                                                      {cv.fullName} {cv.studentId && <span className="text-purple-600 font-bold ml-1 text-xs px-1.5 py-0.5 bg-purple-100 rounded">({cv.studentId})</span>}
-                                                    </p>
-                                                    <div className="flex flex-col gap-1 text-[10px] font-bold text-slate-500 mt-2 tracking-wide uppercase">
-                                                      <div className="flex justify-between items-center bg-slate-50 p-1.5 rounded">
-                                                        <span><span className="text-slate-400">Tuổi:</span> {cv.age}</span>
-                                                        <span><span className="text-slate-400">HDV:</span> {cv.guideName}</span>
-                                                      </div>
-                                                      <div className="flex justify-between items-center px-1">
-                                                        <span className={cv.companion ? cn("px-1.5 py-0.5 rounded border border-transparent font-black", getColorForString(cv.companion)) : "text-slate-400"}>ĐH: {cv.companion || 'Chưa có'}</span>
-                                                        <span className={cv.studyGroup ? cn("px-1.5 py-0.5 rounded border border-transparent font-black", getColorForString(cv.studyGroup)) : "text-slate-400"}>Group: {cv.studyGroup || 'Chưa có'}</span>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="space-y-4">
-                                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                              <div className="flex items-center gap-3">
-                                                 <span className="text-sm font-bold text-slate-700">Đã chọn ({selectedStudentIdsForAssign.length})</span>
-                                              </div>
-                                              <div className="flex gap-2 w-full md:w-auto">
-                                                <select 
-                                                  value={bulkAssignInput}
-                                                  onChange={e => setBulkAssignInput(e.target.value)}
-                                                  className="flex-1 min-w-[200px] border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
-                                                >
-                                                  <option value="">-- Chọn Group học tập --</option>
-                                                  {(course.studyGroups || []).map(g => (
-                                                    <option key={g} value={g}>{g}</option>
-                                                  ))}
-                                                </select>
-                                                <button 
-                                                  onClick={async () => {
-                                                    if (!bulkAssignInput.trim() || selectedStudentIdsForAssign.length === 0) return;
-                                                    try {
-                                                      await Promise.all(selectedStudentIdsForAssign.map(id => updateDoc(doc(db, 'cvs', id), { studyGroup: bulkAssignInput.trim() })));
-                                                      setBulkAssignInput('');
-                                                      setSelectedStudentIdsForAssign([]);
-                                                      setChromeAlert("Đã phân bổ Group học tập thành công!");
-                                                    } catch (e) {
-                                                      console.error(e);
-                                                    }
-                                                  }}
-                                                  className="px-6 py-2 bg-purple-600 shrink-0 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-200"
-                                                >
-                                                  Phân bổ
-                                                </button>
-                                              </div>
-                                            </div>
-                                            
-                                            {/* Group by study group */}
-                                            <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
-                                              {(() => {
-                                                const byGroup = enrolledCvs.reduce((acc, cv) => {
-                                                  const grp = cv.studyGroup || 'Chưa nhóm';
-                                                  if (!acc[grp]) acc[grp] = [];
-                                                  acc[grp].push(cv);
-                                                  return acc;
-                                                }, {} as Record<string, CV[]>);
-                                                
-                                                return Object.entries(byGroup).sort((a,b) => a[0].localeCompare(b[0])).map(([grp, cvs]) => {
-                                                   const checkedCount = cvs.filter(c => selectedStudentIdsForAssign.includes(c.id)).length;
-                                                   const allChecked = checkedCount === cvs.length && cvs.length > 0;
-                                                   return (
-                                                    <div key={grp} className="space-y-3">
-                                                      <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
-                                                        <input 
-                                                          type="checkbox"
-                                                          className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
-                                                          checked={allChecked}
-                                                          onChange={e => {
-                                                            if (e.target.checked) setSelectedStudentIdsForAssign(prev => Array.from(new Set([...prev, ...cvs.map(c => c.id)])));
-                                                            else setSelectedStudentIdsForAssign(prev => prev.filter(id => !cvs.find(c => c.id === id)));
-                                                          }}
-                                                        />
-                                                        <h4 className="font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                                                          <span className={grp !== 'Chưa nhóm' ? cn("px-2 py-0.5 rounded", getColorForString(grp)) : ""}>{grp}</span>
-                                                          <span className="text-slate-400 text-xs tracking-widest">({cvs.length})</span>
-                                                        </h4>
-                                                      </div>
-                                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-8">
-                                                        {cvs.sort((a,b) => a.fullName.localeCompare(b.fullName)).map(cv => (
-                                                          <div key={cv.id} onClick={() => {
-                                                            setSelectedStudentIdsForAssign(prev => prev.includes(cv.id) ? prev.filter(i => i !== cv.id) : [...prev, cv.id]);
-                                                          }} className={cn("cursor-pointer border rounded-xl p-3 flex gap-3 transition-colors", selectedStudentIdsForAssign.includes(cv.id) ? "border-purple-400 bg-purple-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50")}>
-                                                            <input 
-                                                              type="checkbox"
-                                                              className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 mt-0.5 pointer-events-none"
-                                                              checked={selectedStudentIdsForAssign.includes(cv.id)}
-                                                              readOnly
-                                                            />
-                                                            <div className="flex-1 min-w-0">
-                                                              <p className="font-bold text-slate-800 text-sm mb-1 truncate" title={cv.fullName}>
-                                                                {cv.fullName} {cv.studentId && <span className="text-purple-600 font-bold ml-1 text-xs px-1.5 py-0.5 bg-purple-100 rounded">({cv.studentId})</span>}
-                                                              </p>
-                                                              <div className="flex flex-col gap-1 text-[10px] font-bold text-slate-500 mt-2 tracking-wide uppercase">
-                                                                <div className="flex justify-between items-center bg-slate-50 p-1.5 rounded">
-                                                                  <span><span className="text-slate-400">Tuổi:</span> {cv.age}</span>
-                                                                  <span><span className="text-slate-400">HDV:</span> {cv.guideName}</span>
-                                                                </div>
-                                                                <div className="flex justify-between items-center px-1">
-                                                                  <span className={cv.companion ? cn("px-1.5 py-0.5 rounded border border-transparent font-black", getColorForString(cv.companion)) : "text-slate-400"}>ĐH: {cv.companion || 'Chưa có'}</span>
-                                                                  <span className={cv.studyGroup ? cn("px-1.5 py-0.5 rounded border border-transparent font-black", getColorForString(cv.studyGroup)) : "text-slate-400"}>Group: {cv.studyGroup || 'Chưa có'}</span>
-                                                                </div>
-                                                              </div>
-                                                            </div>
-                                                          </div>
-                                                        ))}
-                                                      </div>
-                                                    </div>
-                                                  );
-                                                });
-                                              })()}
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              const displayedCvs = getFilteredCVs();
-                              
                               const renderCVList = (cvList: CV[]) => cvList.map((cv) => (
                                 <div key={cv.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-start justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden group">
                                   {/* Status strip */}
@@ -3215,6 +2939,482 @@ export default function App() {
                                  </div>
                                </div>
                               ));
+
+                              if (adminCvTab === 'learning' && !selectedCourseId) {
+                                return (
+                                  <>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {courses.map(course => (
+                                      <div key={course.id} className="bg-white p-6 rounded-[2rem] border border-purple-100 shadow-sm hover:shadow-xl transition-all relative group cursor-pointer" onClick={() => setSelectedCourseId(course.id)}>
+                                        <div className="w-12 h-12 bg-purple-50 flex items-center justify-center rounded-2xl mb-4 text-purple-600">
+                                          <GraduationCap size={24} />
+                                        </div>
+                                        <h4 className="font-black text-slate-800 text-lg mb-2">{course.name}</h4>
+                                        <div className="space-y-1 mb-4">
+                                          <p className="text-xs font-bold text-slate-500">
+                                            Thời gian: {format(new Date(course.startDate), 'dd/MM/yyyy')} - {format(new Date(course.endDate), 'dd/MM/yyyy')}
+                                          </p>
+                                          <p className="text-xs font-bold text-red-500">
+                                            Ngày chốt: {format(new Date(course.closingDate), 'dd/MM/yyyy')}
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 pt-4 border-t border-slate-50">
+                                          <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-black uppercase tracking-widest">
+                                            {course.studentIds.length} Học viên
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {courses.length === 0 && (
+                                      <div className="col-span-full py-12 text-center text-slate-500 font-medium">
+                                        Chưa có khóa học nào.
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="mt-12">
+                                    <div className="flex items-center gap-3 mb-6">
+                                      <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Danh sách Học lại chờ phân bổ</h3>
+                                      <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-black">
+                                        {cvs.filter(c => c.type === 'reenroll' && !courses.some(course => course.studentIds.includes(c.id))).length}
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                      {renderCVList(cvs.filter(c => c.type === 'reenroll' && !courses.some(course => course.studentIds.includes(c.id))))}
+                                    </div>
+                                  </div>
+                                  </>
+                                );
+                              }
+
+                              if (adminCvTab === 'learning' && selectedCourseId) {
+                                const course = courses.find(c => c.id === selectedCourseId);
+                                if (!course) return null;
+                                const enrolledCvs = cvs.filter(c => course.studentIds.includes(c.id));
+                                return (
+                                  <div className="space-y-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 gap-4">
+                                      <div className="flex items-center gap-4">
+                                        <button 
+                                          onClick={() => setSelectedCourseId(null)}
+                                          className="p-2 bg-slate-50 text-slate-500 hover:text-slate-800 rounded-xl transition-colors"
+                                        >
+                                          <ArrowLeft size={20} />
+                                        </button>
+                                        <div>
+                                          <h3 className="font-black text-slate-800 text-lg flex items-center gap-3">
+                                            {course.name}
+                                            <div className="flex gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
+                                              <button 
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setCourseForm({
+                                                    name: course.name,
+                                                    start: course.startDate,
+                                                    end: course.endDate,
+                                                    closingDate: course.closingDate
+                                                  });
+                                                  setEditingCourseId(course.id);
+                                                  setSelectedLearningCvIds(course.studentIds);
+                                                  setShowCreateCourseModal(true);
+                                                }}
+                                                className="p-1.5 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors"
+                                              >
+                                                <Edit3 size={16} />
+                                              </button>
+                                              <button 
+                                                onClick={async (e) => {
+                                                  e.stopPropagation();
+                                                  if(window.confirm('Bạn có chắc muốn xóa khóa học này?')) {
+                                                    await deleteDoc(doc(db, 'courses', course.id));
+                                                    setSelectedCourseId(null);
+                                                  }
+                                                }}
+                                                className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                                              >
+                                                <Trash2 size={16} />
+                                              </button>
+                                            </div>
+                                          </h3>
+                                          <p className="text-xs font-bold text-slate-500">{enrolledCvs.length} Học viên</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button 
+                                          onClick={async () => {
+                                            if (!window.confirm("Tạo mã học viên định dạng HV-001 tự động xếp theo Người Đồng Hành?")) return;
+                                            
+                                            // Sort by Companion -> Name
+                                            const sorted = [...enrolledCvs].sort((a, b) => {
+                                              const cA = a.companion || 'ZZZ';
+                                              const cB = b.companion || 'ZZZ';
+                                              if (cA !== cB) return cA.localeCompare(cB);
+                                              return a.fullName.localeCompare(b.fullName);
+                                            });
+
+                                            try {
+                                              await Promise.all(sorted.map((cv, index) => {
+                                                const idNum = (index + 1).toString().padStart(3, '0');
+                                                const studentId = `HV-${idNum}`;
+                                                return updateDoc(doc(db, 'cvs', cv.id), { studentId });
+                                              }));
+                                              setChromeAlert("Đã tạo mã học viên thành công!");
+                                            } catch (e) {
+                                              console.error(e);
+                                            }
+                                          }}
+                                          className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl hover:bg-purple-100 transition-all text-xs font-black uppercase tracking-widest"
+                                        >
+                                          <Sparkles size={16} />
+                                          Tạo Mã HV
+                                        </button>
+                                        <button 
+                                          onClick={async () => {
+                                            const { utils, writeFile } = await import('xlsx');
+                                            const formatCVData = (items: CV[]) => items.map((cv, index) => ({
+                                              'STT': index + 1,
+                                              'Ngày tạo CV': cv.createdAt ? format(cv.createdAt.toDate ? cv.createdAt.toDate() : (typeof cv.createdAt === 'number' ? new Date(cv.createdAt) : new Date(cv.createdAt)), 'dd/MM/yyyy HH:mm') : '',
+                                              'Người đồng hành': cv.companion || '',
+                                              'Mã học viên': cv.studentId || '',
+                                              'Họ tên': cv.fullName,
+                                              'Tuổi': cv.age,
+                                              'Hướng dẫn viên': cv.guideName,
+                                              'Group học tập': cv.studyGroup || ''
+                                            }));
+                                            const ws = utils.json_to_sheet(formatCVData(enrolledCvs));
+                                            const wb = utils.book_new();
+                                            utils.book_append_sheet(wb, ws, "Khóa Học");
+                                            writeFile(wb, `KhoaHoc_${course.name}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
+                                          }}
+                                          className="flex items-center gap-2 px-4 py-2.5 bg-green-50 text-green-700 border border-green-200 rounded-xl hover:bg-green-100 transition-all text-xs font-black uppercase tracking-widest"
+                                        >
+                                          <Download size={16} />
+                                          Xuất Excel
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col lg:flex-row gap-6">
+                                      {/* Left Tabs pane */}
+                                      <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2">
+                                        <button 
+                                          onClick={() => { setCourseDetailTab('companion'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
+                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'companion' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                        >
+                                          Phân bổ Người đồng hành
+                                        </button>
+                                        <button 
+                                          onClick={() => { setCourseDetailTab('group'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
+                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'group' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                        >
+                                          Phân bổ Group học tập
+                                        </button>
+                                      </div>
+
+                                      {/* Right Content pane */}
+                                      <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-6">
+                                        {/* Management Section */}
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
+                                          <h4 className="font-bold text-slate-800 text-sm">
+                                            {courseDetailTab === 'companion' ? 'Danh sách Người đồng hành' : 'Danh sách Group học tập'}
+                                          </h4>
+                                          <div className="flex gap-2">
+                                            <input
+                                              type="text"
+                                              placeholder={courseDetailTab === 'companion' ? "Tên người đồng hành mới..." : "Tên Group học tập mới..."}
+                                              value={newEntityName}
+                                              onChange={e => setNewEntityName(e.target.value)}
+                                              className="flex-1 w-full border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
+                                            />
+                                            <button
+                                              onClick={async () => {
+                                                if (!newEntityName.trim()) return;
+                                                const field = courseDetailTab === 'companion' ? 'companions' : 'studyGroups';
+                                                const currentList = course[field] || [];
+                                                if (!currentList.includes(newEntityName.trim())) {
+                                                  await updateDoc(doc(db, 'courses', course.id), {
+                                                    [field]: [...currentList, newEntityName.trim()]
+                                                  });
+                                                  setNewEntityName('');
+                                                } else {
+                                                  setChromeAlert("Tên này đã tồn tại!");
+                                                }
+                                              }}
+                                              className="px-6 py-2 bg-purple-600 shrink-0 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-200"
+                                            >
+                                              Tạo mới
+                                            </button>
+                                          </div>
+                                          
+                                          {/* Tags of created entities */}
+                                          <div className="flex flex-wrap gap-2 mt-2">
+                                            {(courseDetailTab === 'companion' ? (course.companions || []) : (course.studyGroups || [])).map(item => {
+                                              const assignCount = courseDetailTab === 'companion' 
+                                                ? enrolledCvs.filter(c => c.companion === item).length
+                                                : enrolledCvs.filter(c => c.studyGroup === item).length;
+                                              return (
+                                              <div key={item} className={cn("flex items-center gap-1.5 px-3 py-1 bg-white border rounded-lg text-xs font-bold shadow-sm", getColorForString(item))}>
+                                                {item} <span className="opacity-75">({assignCount})</span>
+                                                <button 
+                                                  onClick={async () => {
+                                                    if (window.confirm(`Xóa ${item} khỏi danh sách?`)) {
+                                                      const field = courseDetailTab === 'companion' ? 'companions' : 'studyGroups';
+                                                      const cvField = courseDetailTab === 'companion' ? 'companion' : 'studyGroup';
+                                                      const currentList = course[field] || [];
+                                                      await updateDoc(doc(db, 'courses', course.id), {
+                                                        [field]: currentList.filter(i => i !== item)
+                                                      });
+
+                                                      // Also clear from all assigned CVs
+                                                      const cvsToClear = enrolledCvs.filter(cv => cv[cvField] === item);
+                                                      await Promise.all(cvsToClear.map(cv => 
+                                                        updateDoc(doc(db, 'cvs', cv.id), {
+                                                          [cvField]: ''
+                                                        })
+                                                      ));
+                                                      setChromeAlert(`Đã xóa ${item} và gỡ phân bổ các CV liên quan!`);
+                                                    }
+                                                  }}
+                                                  className="text-slate-400 hover:text-red-500 transition-colors text-lg leading-none"
+                                                >
+                                                  &times;
+                                                </button>
+                                              </div>
+                                            )})}
+                                            {(courseDetailTab === 'companion' ? (course.companions || []) : (course.studyGroups || [])).length === 0 && (
+                                              <span className="text-xs text-slate-400">Chưa có dữ liệu. Hãy tạo mới ở trên.</span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {courseDetailTab === 'companion' ? (
+                                          <div className="space-y-4">
+                                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                              <div className="flex items-center gap-3">
+                                                <input 
+                                                  type="checkbox"
+                                                  className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                                  checked={selectedStudentIdsForAssign.length === enrolledCvs.length && enrolledCvs.length > 0}
+                                                  onChange={(e) => {
+                                                    if (e.target.checked) setSelectedStudentIdsForAssign(enrolledCvs.map(c => c.id));
+                                                    else setSelectedStudentIdsForAssign([]);
+                                                  }}
+                                                />
+                                                <span className="text-sm font-bold text-slate-700">Chọn tất cả ({selectedStudentIdsForAssign.length}/{enrolledCvs.length})</span>
+                                              </div>
+                                              <div className="flex flex-col md:flex-row gap-2 w-full lg:w-auto">
+                                                <select 
+                                                  value={assignFilter}
+                                                  onChange={e => setAssignFilter(e.target.value)}
+                                                  className="border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-blue-700 outline-none focus:border-blue-400"
+                                                >
+                                                  <option value="all">Lọc: Tất cả CV</option>
+                                                  <option value="unassigned">Lọc: Chưa phân bổ</option>
+                                                  {(course.companions || []).map(c => (
+                                                    <option key={c} value={c}>Lọc: {c}</option>
+                                                  ))}
+                                                </select>
+                                                <div className="w-px bg-slate-200 hidden md:block mx-1"></div>
+                                                <select 
+                                                  value={bulkAssignInput}
+                                                  onChange={e => setBulkAssignInput(e.target.value)}
+                                                  className="flex-1 min-w-[200px] border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
+                                                >
+                                                  <option value="">-- Chọn Người đồng hành --</option>
+                                                  {(course.companions || []).map(c => (
+                                                    <option key={c} value={c}>{c}</option>
+                                                  ))}
+                                                </select>
+                                                <button 
+                                                  onClick={async () => {
+                                                    if (!bulkAssignInput.trim() || selectedStudentIdsForAssign.length === 0) return;
+                                                    try {
+                                                      await Promise.all(selectedStudentIdsForAssign.map(id => updateDoc(doc(db, 'cvs', id), { companion: bulkAssignInput.trim() })));
+                                                      setBulkAssignInput('');
+                                                      setSelectedStudentIdsForAssign([]);
+                                                      setChromeAlert("Đã phân bổ Người đồng hành thành công!");
+                                                    } catch (e) {
+                                                      console.error(e);
+                                                    }
+                                                  }}
+                                                  className="px-6 py-2 bg-purple-600 shrink-0 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-200"
+                                                >
+                                                  Phân bổ
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto pr-2">
+                                              {enrolledCvs
+                                                .filter(cv => {
+                                                  if (assignFilter === 'all') return true;
+                                                  if (assignFilter === 'unassigned') return !cv.companion;
+                                                  return cv.companion === assignFilter;
+                                                })
+                                                .sort((a,b) => {
+                                                const compA = a.companion || 'ZZZ';
+                                                const compB = b.companion || 'ZZZ';
+                                                if (compA !== compB) return compA.localeCompare(compB);
+                                                return a.fullName.localeCompare(b.fullName);
+                                              }).map(cv => (
+                                                <div key={cv.id} onClick={() => {
+                                                  setSelectedStudentIdsForAssign(prev => prev.includes(cv.id) ? prev.filter(i => i !== cv.id) : [...prev, cv.id]);
+                                                }} className={cn("cursor-pointer border rounded-xl p-3 flex gap-3 transition-all", selectedStudentIdsForAssign.includes(cv.id) ? "border-purple-400 bg-purple-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50")}>
+                                                  <input 
+                                                    type="checkbox"
+                                                    className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 mt-0.5 pointer-events-none"
+                                                    checked={selectedStudentIdsForAssign.includes(cv.id)}
+                                                    readOnly
+                                                  />
+                                                  <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-slate-800 text-sm mb-1 truncate" title={cv.fullName}>
+                                                      {cv.fullName} {cv.studentId && <span className="text-purple-600 font-bold ml-1 text-xs px-1.5 py-0.5 bg-purple-100 rounded">({cv.studentId})</span>}
+                                                      {cv.type === 'reenroll' && <span className="ml-2 px-1.5 py-0.5 bg-yellow-100 text-amber-700 rounded text-[9px] font-black uppercase tracking-widest border border-yellow-200">Học lại ({cv.previousCourse})</span>}
+                                                    </p>
+                                                    <div className="flex flex-col gap-1 text-[10px] font-bold text-slate-500 mt-2 tracking-wide uppercase">
+                                                      <div className="flex justify-between items-center bg-slate-50 p-1.5 rounded">
+                                                        <span><span className="text-slate-400">Tuổi:</span> {cv.age}</span>
+                                                        <span><span className="text-slate-400">HDV:</span> {cv.guideName}</span>
+                                                      </div>
+                                                      <div className="flex justify-between items-center px-1">
+                                                        <span className={cv.companion ? cn("px-1.5 py-0.5 rounded border border-transparent font-black", getColorForString(cv.companion)) : "text-slate-400"}>ĐH: {cv.companion || 'Chưa có'}</span>
+                                                        <span className={cv.studyGroup ? cn("px-1.5 py-0.5 rounded border border-transparent font-black", getColorForString(cv.studyGroup)) : "text-slate-400"}>Group: {cv.studyGroup || 'Chưa có'}</span>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-4">
+                                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                              <div className="flex items-center gap-3">
+                                                 <span className="text-sm font-bold text-slate-700">Đã chọn ({selectedStudentIdsForAssign.length})</span>
+                                              </div>
+                                              <div className="flex flex-col md:flex-row gap-2 w-full lg:w-auto">
+                                                <select 
+                                                  value={assignFilter}
+                                                  onChange={e => setAssignFilter(e.target.value)}
+                                                  className="border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-blue-700 outline-none focus:border-blue-400"
+                                                >
+                                                  <option value="all">Lọc: Tất cả CV</option>
+                                                  <option value="unassigned">Lọc: Chưa phân bổ</option>
+                                                  {(course.studyGroups || []).map(g => (
+                                                    <option key={g} value={g}>Lọc: {g}</option>
+                                                  ))}
+                                                </select>
+                                                <div className="w-px bg-slate-200 hidden md:block mx-1"></div>
+                                                <select 
+                                                  value={bulkAssignInput}
+                                                  onChange={e => setBulkAssignInput(e.target.value)}
+                                                  className="flex-1 min-w-[200px] border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
+                                                >
+                                                  <option value="">-- Chọn Group học tập --</option>
+                                                  {(course.studyGroups || []).map(g => (
+                                                    <option key={g} value={g}>{g}</option>
+                                                  ))}
+                                                </select>
+                                                <button 
+                                                  onClick={async () => {
+                                                    if (!bulkAssignInput.trim() || selectedStudentIdsForAssign.length === 0) return;
+                                                    try {
+                                                      await Promise.all(selectedStudentIdsForAssign.map(id => updateDoc(doc(db, 'cvs', id), { studyGroup: bulkAssignInput.trim() })));
+                                                      setBulkAssignInput('');
+                                                      setSelectedStudentIdsForAssign([]);
+                                                      setChromeAlert("Đã phân bổ Group học tập thành công!");
+                                                    } catch (e) {
+                                                      console.error(e);
+                                                    }
+                                                  }}
+                                                  className="px-6 py-2 bg-purple-600 shrink-0 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-200"
+                                                >
+                                                  Phân bổ
+                                                </button>
+                                              </div>
+                                            </div>
+                                            
+                                            {/* Group by study group */}
+                                            <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+                                              {(() => {
+                                                let filteredCvs = enrolledCvs;
+                                                if (assignFilter === 'unassigned') {
+                                                  filteredCvs = enrolledCvs.filter(cv => !cv.studyGroup);
+                                                } else if (assignFilter !== 'all') {
+                                                  filteredCvs = enrolledCvs.filter(cv => cv.studyGroup === assignFilter);
+                                                }
+
+                                                const byGroup = filteredCvs.reduce((acc, cv) => {
+                                                  const grp = cv.studyGroup || 'Chưa nhóm';
+                                                  if (!acc[grp]) acc[grp] = [];
+                                                  acc[grp].push(cv);
+                                                  return acc;
+                                                }, {} as Record<string, CV[]>);
+                                                
+                                                return (Object.entries(byGroup) as [string, CV[]][]).sort((a,b) => a[0].localeCompare(b[0])).map(([grp, cvs]) => {
+                                                   const checkedCount = cvs.filter(c => selectedStudentIdsForAssign.includes(c.id)).length;
+                                                   const allChecked = checkedCount === cvs.length && cvs.length > 0;
+                                                   return (
+                                                    <div key={grp} className="space-y-3">
+                                                      <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
+                                                        <input 
+                                                          type="checkbox"
+                                                          className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                                          checked={allChecked}
+                                                          onChange={e => {
+                                                            if (e.target.checked) setSelectedStudentIdsForAssign(prev => Array.from(new Set([...prev, ...cvs.map(c => c.id)])));
+                                                            else setSelectedStudentIdsForAssign(prev => prev.filter(id => !cvs.find(c => c.id === id)));
+                                                          }}
+                                                        />
+                                                        <h4 className="font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                                                          <span className={grp !== 'Chưa nhóm' ? cn("px-2 py-0.5 rounded", getColorForString(grp)) : ""}>{grp}</span>
+                                                          <span className="text-slate-400 text-xs tracking-widest">({cvs.length})</span>
+                                                        </h4>
+                                                      </div>
+                                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-8">
+                                                        {cvs.sort((a,b) => a.fullName.localeCompare(b.fullName)).map(cv => (
+                                                          <div key={cv.id} onClick={() => {
+                                                            setSelectedStudentIdsForAssign(prev => prev.includes(cv.id) ? prev.filter(i => i !== cv.id) : [...prev, cv.id]);
+                                                          }} className={cn("cursor-pointer border rounded-xl p-3 flex gap-3 transition-colors", selectedStudentIdsForAssign.includes(cv.id) ? "border-purple-400 bg-purple-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50")}>
+                                                            <input 
+                                                              type="checkbox"
+                                                              className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 mt-0.5 pointer-events-none"
+                                                              checked={selectedStudentIdsForAssign.includes(cv.id)}
+                                                              readOnly
+                                                            />
+                                                            <div className="flex-1 min-w-0">
+                                                              <p className="font-bold text-slate-800 text-sm mb-1 truncate" title={cv.fullName}>
+                                                                {cv.fullName} {cv.studentId && <span className="text-purple-600 font-bold ml-1 text-xs px-1.5 py-0.5 bg-purple-100 rounded">({cv.studentId})</span>}
+                                                                {cv.type === 'reenroll' && <span className="ml-2 px-1.5 py-0.5 bg-yellow-100 text-amber-700 rounded text-[9px] font-black uppercase tracking-widest border border-yellow-200">Học lại ({cv.previousCourse})</span>}
+                                                              </p>
+                                                              <div className="flex flex-col gap-1 text-[10px] font-bold text-slate-500 mt-2 tracking-wide uppercase">
+                                                                <div className="flex justify-between items-center bg-slate-50 p-1.5 rounded">
+                                                                  <span><span className="text-slate-400">Tuổi:</span> {cv.age}</span>
+                                                                  <span><span className="text-slate-400">HDV:</span> {cv.guideName}</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center px-1">
+                                                                  <span className={cv.companion ? cn("px-1.5 py-0.5 rounded border border-transparent font-black", getColorForString(cv.companion)) : "text-slate-400"}>ĐH: {cv.companion || 'Chưa có'}</span>
+                                                                  <span className={cv.studyGroup ? cn("px-1.5 py-0.5 rounded border border-transparent font-black", getColorForString(cv.studyGroup)) : "text-slate-400"}>Group: {cv.studyGroup || 'Chưa có'}</span>
+                                                                </div>
+                                                              </div>
+                                                            </div>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                });
+                                              })()}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              const displayedCvs = getFilteredCVs();
+                              
                               
                               return (
                                 <>
@@ -3272,7 +3472,7 @@ export default function App() {
                                           <h4 className="text-sm font-black text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">Ngày {dateStr}</h4>
                                           <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded-full">{(cvsInDate as CV[]).length} CV</span>
                                         </div>
-                                        <div className="space-y-4">
+                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                           {renderCVList(cvsInDate as CV[])}
                                         </div>
                                       </div>
@@ -3290,7 +3490,7 @@ export default function App() {
                                                 <h4 className="text-sm font-black text-blue-700 bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 shadow-sm">Cần xử lý ngay</h4>
                                                 <span className="bg-white border border-blue-200 text-blue-700 text-xs font-bold px-2 py-1 rounded-full shadow-sm">{priorityCvs.length} CV</span>
                                               </div>
-                                              <div className="space-y-4">
+                                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                                 {renderCVList(priorityCvs)}
                                               </div>
                                             </div>
@@ -3301,7 +3501,7 @@ export default function App() {
                                                 <h4 className="text-sm font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">Đã xử lý (Hoàn thành / Từ chối)</h4>
                                                 <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded-full shadow-sm">{otherCvs.length} CV</span>
                                               </div>
-                                              <div className="space-y-4">
+                                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                                 {renderCVList(otherCvs)}
                                               </div>
                                             </div>
@@ -3629,7 +3829,7 @@ export default function App() {
                   onClick={() => {
                     setShowCVModal(false);
                     setEditingCvId(null);
-                    setFoundCV(null);
+                    setFoundCVs([]);
                     setCvSearchPIN('');
                     setCvSearchPhoneLast4('');
                   }} 
@@ -3639,16 +3839,17 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex bg-slate-100 p-1 rounded-2xl mb-8">
+              <div className="flex bg-slate-100 p-1 rounded-2xl mb-8 flex-wrap">
                 {[
                   { id: 'create', label: 'Tạo CV Mới', icon: <Plus size={16} /> },
                   { id: 'search', label: 'Tìm Kiếm CV', icon: <Search size={16} /> },
+                  { id: 'reenroll', label: 'Đăng Ký Học Lại', icon: <RefreshCw size={16} /> },
                 ].map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => {
                       setCvModalTab(tab.id as any);
-                      setFoundCV(null);
+                      setFoundCVs([]);
                       setCvSearchPIN('');
                       setCvSearchPhoneLast4('');
                     }}
@@ -3769,7 +3970,7 @@ export default function App() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN bảo mật CV (Để tìm kiếm sau này)</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN bảo mật CV (Để tìm kiếm sau này) *</label>
                     <input required type="password" placeholder="Tối thiểu 4 ký tự" 
                       value={cvFormData.password} onChange={(e) => setCvFormData({ ...cvFormData, password: e.target.value })}
                       className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest" />
@@ -3834,6 +4035,66 @@ export default function App() {
                   </button>
                   </form>
                 </>
+              ) : cvModalTab === 'reenroll' ? (
+                <>
+                  <form onSubmit={handleCVSubmit} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Họ tên học viên *</label>
+                        <input required type="text" placeholder="Nguyễn Văn A" 
+                          value={cvFormData.fullName} onChange={(e) => setCvFormData({ ...cvFormData, fullName: e.target.value })}
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                      </div>
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Điện thoại *</label>
+                         <input required type="tel" placeholder="090..." 
+                          value={cvFormData.phone} onChange={(e) => setCvFormData({ ...cvFormData, phone: e.target.value })}
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tuổi *</label>
+                        <input required type="text" placeholder="25" 
+                          value={cvFormData.age} onChange={(e) => setCvFormData({ ...cvFormData, age: e.target.value })}
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                      </div>
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tên hướng dẫn viên *</label>
+                         <input required type="text" placeholder="Tên người hướng dẫn..." 
+                          value={cvFormData.guideName} onChange={(e) => setCvFormData({ ...cvFormData, guideName: e.target.value })}
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Khóa tham gia *</label>
+                        <select required 
+                          value={cvFormData.previousCourse || ''} onChange={(e) => setCvFormData({ ...cvFormData, previousCourse: e.target.value })}
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm text-slate-700"
+                        >
+                          <option value="">-- Chọn Khóa Học đã tạo --</option>
+                          {courses.map(course => (
+                            <option key={course.id} value={course.name}>{course.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 mt-8 border-t border-slate-100 space-y-4">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-[10px] text-slate-500 font-bold mb-4">
+                        Thông tin bảo mật để bạn có thể tự tra cứu tình trạng ứng tuyển (Sẽ áp dụng chung vào tính năng Tìm kiếm CV)
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN bảo mật CV *</label>
+                        <input required type="password" placeholder="Tối thiểu 4 ký tự" 
+                          value={cvFormData.password} onChange={(e) => setCvFormData({ ...cvFormData, password: e.target.value })}
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest" />
+                      </div>
+                    </div>
+
+                    <button type="submit" disabled={isSubmittingCV}
+                      className="w-full py-4 bg-amber-950 text-yellow-400 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50">
+                      {isSubmittingCV ? 'Đang lưu...' : 'Nộp Đăng Ký Học Lại'}
+                    </button>
+                  </form>
+                </>
               ) : (
                 <div className="space-y-8">
                   <div className="space-y-4">
@@ -3855,7 +4116,7 @@ export default function App() {
                       </div>
                       
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN CV</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN đã tạo</label>
                         <input 
                           type="password" 
                           placeholder="Mã PIN" 
@@ -3872,116 +4133,157 @@ export default function App() {
                     </button>
                   </div>
 
-                  {foundCV && (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                      className="p-8 bg-yellow-50 rounded-3xl border border-yellow-200 space-y-6">
-                      <div className="flex items-center justify-between border-b border-yellow-200 pb-4">
-                        <h4 className="text-xl font-black text-slate-900 tracking-tight">{foundCV.fullName}</h4>
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest",
-                            foundCV.status === 'approved' ? "bg-green-100 text-green-700" : 
-                            foundCV.status === 'rejected' ? "bg-red-100 text-red-700" :
-                            "bg-orange-100 text-orange-700 animate-pulse"
-                          )}>
-                            {foundCV.status === 'approved' ? 'Đã phê duyệt' : 
-                             foundCV.status === 'rejected' ? 'Bị từ chối' : 'Chờ phê duyệt'}
-                          </span>
-                          {!foundCV.appApproved && (
-                            <button 
-                              onClick={() => startEditCV(foundCV)}
-                              className="p-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors shadow-sm border border-blue-100"
-                              title="Chỉnh sửa thông tin"
-                            >
-                              <Edit3 size={14} />
-                            </button>
-                          )}
-                        </div>
+                  {foundCVs.length > 0 && (
+                    <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+                      <div className="text-sm font-bold text-slate-600 bg-slate-100 py-2 px-4 rounded-xl flex justify-between items-center">
+                        Tìm thấy {foundCVs.length} hồ sơ khớp với thông tin.
                       </div>
-                      
-                      {foundCV.status === 'pending' && (
-                        <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl text-[10px] text-orange-600 font-bold flex items-center gap-2">
-                          <Clock size={12} />
-                          <span>Hồ sơ của bạn đang chờ Kế toán kiểm tra và phê duyệt.</span>
-                        </div>
-                      )}
-                      
-                      {foundCV.status === 'rejected' && (
-                        <div className="bg-red-50 border border-red-100 p-4 rounded-xl text-[10px] text-red-600 font-bold flex flex-col gap-2 mt-2">
-                          <div className="flex items-center gap-2">
-                            <X size={14} />
-                            <span className="text-sm">Hồ sơ của bạn đã bị từ chối bởi Kế toán. Vui lòng chỉnh sửa lại.</span>
+                      {foundCVs.map(foundCV => (
+                        <motion.div key={foundCV.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                          className="p-8 bg-yellow-50 rounded-3xl border border-yellow-200 space-y-6 relative overflow-hidden">
+                          <div className="flex items-center justify-between border-b border-yellow-200 pb-4">
+                            <h4 className="text-xl font-black text-slate-900 tracking-tight pr-4">{foundCV.fullName} <span className="text-xs text-slate-500 font-medium ml-2">({foundCV.age} tuổi)</span></h4>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={cn(
+                                "px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest",
+                                foundCV.status === 'approved' ? "bg-green-100 text-green-700" : 
+                                foundCV.status === 'rejected' ? "bg-red-100 text-red-700" :
+                                "bg-orange-100 text-orange-700 animate-pulse"
+                              )}>
+                                {foundCV.status === 'approved' ? 'Đã phê duyệt' : 
+                                 foundCV.status === 'rejected' ? 'Bị từ chối' : 'Chờ phê duyệt'}
+                              </span>
+                              {!foundCV.appApproved && (
+                                <button 
+                                  onClick={() => startEditCV(foundCV)}
+                                  className="p-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors shadow-sm border border-blue-100"
+                                  title="Chỉnh sửa thông tin"
+                                >
+                                  <Edit3 size={14} />
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          {foundCV.cancellationReason && (
-                            <p className="mt-2 text-xs font-medium italic p-3 bg-red-100/50 rounded-lg">
-                              <span className="text-red-400 font-black not-italic mr-1">Lý do từ chối:</span> 
-                              {foundCV.cancellationReason}
-                            </p>
+                          
+                          {foundCV.status === 'pending' && (
+                            <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl text-[10px] text-orange-600 font-bold flex items-center gap-2">
+                              <Clock size={12} />
+                              <span>Hồ sơ của bạn đang chờ Kế toán kiểm tra và phê duyệt.</span>
+                            </div>
                           )}
-                        </div>
-                      )}
-
-                      {foundCV.status === 'approved' && (
-                        <div className={cn(
-                          "border p-4 rounded-xl text-[10px] font-bold flex flex-col gap-2 mt-2",
-                          foundCV.appApproved === true 
-                            ? "bg-blue-50 border-blue-100 text-blue-600" 
-                            : foundCV.appRejectedReason
-                              ? "bg-red-50 border-red-100 text-red-600"
-                              : "bg-green-50 border-green-100 text-green-600"
-                        )}>
-                          <div className="flex items-center gap-2">
-                            {foundCV.appApproved === true ? <Smartphone size={14} /> : foundCV.appRejectedReason ? <X size={14} /> : <Check size={14} />}
-                            <span className="text-sm">
-                              {foundCV.appApproved === true 
-                                ? "Đã được kích hoạt trên App" 
-                                : foundCV.appRejectedReason 
-                                  ? "Duyệt App thất bại. Vui lòng sửa lỗi và đợi cập nhật lại." 
-                                  : "Đã qua bước Kế toán phê duyệt. Đang chờ Duyệt App."}
-                            </span>
-                          </div>
-                          {foundCV.appRejectedReason && (
-                            <p className="mt-2 text-xs font-medium italic p-3 bg-red-100/50 rounded-lg">
-                              <span className="text-red-400 font-black not-italic mr-1">Lý do từ chối Duyệt App:</span> 
-                              {foundCV.appRejectedReason}
-                            </p>
+                          
+                          {foundCV.status === 'rejected' && (
+                            <div className="bg-red-50 border border-red-100 p-4 rounded-xl text-[10px] text-red-600 font-bold flex flex-col gap-2 mt-2">
+                              <div className="flex items-center gap-2">
+                                <X size={14} />
+                                <span className="text-sm">Hồ sơ của bạn đã bị từ chối bởi Kế toán. Vui lòng chỉnh sửa lại.</span>
+                              </div>
+                              {foundCV.cancellationReason && (
+                                <p className="mt-2 text-xs font-medium italic p-3 bg-red-100/50 rounded-lg">
+                                  <span className="text-red-400 font-black not-italic mr-1">Lý do từ chối:</span> 
+                                  {foundCV.cancellationReason}
+                                </p>
+                              )}
+                            </div>
                           )}
-                        </div>
-                      )}
 
-                      <div className="grid grid-cols-2 gap-6">
-                        <div>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Học viên</p>
-                          <p className="text-xs font-bold text-slate-700">{foundCV.age} tuổi</p>
-                          <p className="text-xs font-medium text-slate-500">{foundCV.job}</p>
-                          <p className="text-xs font-medium text-slate-500 truncate">{foundCV.address}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Liên hệ</p>
-                          <p className="text-xs font-bold text-slate-700">{foundCV.phone}</p>
-                        </div>
-                        <div className="col-span-2 pt-2 border-t border-yellow-100">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-bold text-slate-700">{foundCV.guideName}</p>
-                            <p className="text-[10px] font-black text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded-lg">SĐT: ...{foundCV.guidePhoneLast4}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mong muốn</p>
-                        <p className="text-xs text-slate-800 leading-relaxed font-medium bg-white/50 p-4 rounded-xl border border-white/50 italic">{foundCV.target}</p>
-                      </div>
+                          {foundCV.status === 'approved' && (
+                            <div className={cn(
+                              "border p-4 rounded-xl text-[10px] font-bold flex flex-col gap-2 mt-2",
+                              foundCV.appApproved === true 
+                                ? "bg-blue-50 border-blue-100 text-blue-600" 
+                                : foundCV.appRejectedReason
+                                  ? "bg-red-50 border-red-100 text-red-600"
+                                  : "bg-green-50 border-green-100 text-green-600"
+                            )}>
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                  {foundCV.appApproved === true ? <Smartphone size={14} /> : foundCV.appRejectedReason ? <X size={14} /> : <Check size={14} />}
+                                  <span className="text-sm">
+                                    {foundCV.appApproved === true 
+                                      ? "Đã được kích hoạt trên App" 
+                                      : foundCV.appRejectedReason 
+                                        ? "Duyệt App thất bại. Vui lòng sửa lỗi và đợi cập nhật lại." 
+                                        : "Đã qua bước Kế toán phê duyệt. Đang chờ Duyệt App."}
+                                  </span>
+                                </div>
+                                {foundCV.type === 'reenroll' && foundCV.appApproved === true && (
+                                  <div className="flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-4 shrink-0 text-right">
+                                    {foundCV.companion && (
+                                      <p className="bg-white/60 px-3 py-1.5 rounded-lg border border-blue-100/50">
+                                        Đồng hành: <span className="font-black ml-1">{foundCV.companion}</span>
+                                      </p>
+                                    )}
+                                    {foundCV.studyGroup && (
+                                      <p className="bg-white/60 px-3 py-1.5 rounded-lg border border-blue-100/50">
+                                        Group: <span className="font-black ml-1 text-purple-600 uppercase tracking-widest">{foundCV.studyGroup}</span>
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              {foundCV.appRejectedReason && (
+                                <p className="mt-2 text-xs font-medium italic p-3 bg-red-100/50 rounded-lg">
+                                  <span className="text-red-400 font-black not-italic mr-1">Lý do từ chối Duyệt App:</span> 
+                                  {foundCV.appRejectedReason}
+                                </p>
+                              )}
+                            </div>
+                          )}
 
-                      {foundCV.paymentImageUrl && (
-                        <div className="space-y-3">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Bill Chuyển khoản</p>
-                          <div className="rounded-2xl overflow-hidden border border-yellow-200 bg-white">
-                            <img src={foundCV.paymentImageUrl} alt="Chuyển khoản" className="w-full h-auto max-h-64 object-contain" />
-                          </div>
-                        </div>
-                      )}
-                    </motion.div>
+                          {foundCV.type === 'reenroll' ? (
+                            <div className="grid grid-cols-2 gap-6">
+                              <div className="col-span-2 pt-2 border-t border-yellow-100">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Khóa tham gia trước</p>
+                                <p className="text-xs font-bold text-slate-700">{foundCV.previousCourse || '---'}</p>
+                              </div>
+                              <div className="pt-2 border-t border-yellow-100">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Liên hệ</p>
+                                <p className="text-xs font-bold text-slate-700">{foundCV.phone}</p>
+                              </div>
+                              <div className="pt-2 border-t border-yellow-100">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
+                                <p className="text-xs font-bold text-slate-700">{foundCV.guideName}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Công việc / Địa chỉ</p>
+                                  <p className="text-xs font-medium text-slate-500">{foundCV.job || '---'}</p>
+                                  <p className="text-xs font-medium text-slate-500 truncate">{foundCV.address || '---'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Liên hệ</p>
+                                  <p className="text-xs font-bold text-slate-700">{foundCV.phone}</p>
+                                </div>
+                                <div className="col-span-2 pt-2 border-t border-yellow-100">
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hướng dẫn viên</p>
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs font-bold text-slate-700">{foundCV.guideName}</p>
+                                    <p className="text-[10px] font-black text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded-lg">SĐT: ...{foundCV.guidePhoneLast4}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mong muốn</p>
+                                <p className="text-xs text-slate-800 leading-relaxed font-medium bg-white/50 p-4 rounded-xl border border-white/50 italic">{foundCV.target || 'Không có'}</p>
+                              </div>
+
+                              {foundCV.paymentImageUrl && (
+                                <div className="space-y-3">
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Bill Chuyển khoản</p>
+                                  <div className="rounded-2xl overflow-hidden border border-yellow-200 bg-white flex justify-center">
+                                    <img src={foundCV.paymentImageUrl} alt="Chuyển khoản" className="max-w-full h-auto max-h-64 object-contain" />
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </motion.div>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
