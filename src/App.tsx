@@ -827,11 +827,11 @@ export default function App() {
       const trimmed = line.trim();
       
       const getValue = (indicator: string, label: string) => {
-        if (trimmed.startsWith(indicator)) {
-          return trimmed.replace(indicator, '').replace(label, '').replace(':', '').trim();
-        }
-        if (trimmed.toLowerCase().startsWith(label.toLowerCase())) {
-          return trimmed.replace(label, '').replace(':', '').trim();
+        const escapedIndicator = indicator.replace('.', '\\.');
+        const regex = new RegExp(`^(${escapedIndicator}\\s*)?${label}([^:]*:)?\\s*(.*)$`, 'i');
+        const match = trimmed.match(regex);
+        if (match) {
+           return match[3].trim();
         }
         return null;
       };
@@ -845,20 +845,32 @@ export default function App() {
       const age = getValue('3.', 'Tuổi');
       if (age !== null) newFormData.age = age;
 
-      const address = getValue('4.', 'Địa Chỉ');
-      if (address !== null) newFormData.address = address;
+      if (cvModalTab === 'create') {
+        const address = getValue('4.', 'Địa Chỉ') || getValue('4.', 'Địa chỉ');
+        if (address !== null) newFormData.address = address;
 
-      const job = getValue('5.', 'Công Việc');
-      if (job !== null) newFormData.job = job;
+        const job = getValue('5.', 'Công Việc') || getValue('5.', 'Công việc');
+        if (job !== null) newFormData.job = job;
 
-      const target = getValue('6.', 'Mong muốn');
-      if (target !== null) newFormData.target = target;
+        const target = getValue('6.', 'Mong muốn');
+        if (target !== null) newFormData.target = target;
 
-      const guideName = getValue('7.', 'Tên hướng dẫn viên');
-      if (guideName !== null) newFormData.guideName = guideName;
+        const guideName = getValue('7.', 'Tên hướng dẫn viên') || getValue('7.', 'Người hướng dẫn');
+        if (guideName !== null) newFormData.guideName = guideName;
 
-      const guidePhoneLast4 = getValue('8.', '4 số cuối SĐT của HDV');
-      if (guidePhoneLast4 !== null) newFormData.guidePhoneLast4 = guidePhoneLast4;
+        const guidePhoneLast4 = getValue('8.', '4 số cuối') || getValue('8.', 'số điện thoại');
+        if (guidePhoneLast4 !== null) newFormData.guidePhoneLast4 = guidePhoneLast4;
+      } else {
+        const guideName = getValue('4.', 'Tên hướng dẫn viên') || getValue('4.', 'Người hướng dẫn') || getValue('7.', 'Tên hướng dẫn viên');
+        if (guideName !== null) newFormData.guideName = guideName;
+
+        const prevCourse = getValue('5.', 'Tham gia') || getValue('5.', 'Khóa') || getValue('5.', 'Đã tham gia');
+        if (prevCourse !== null) {
+          const match = courses.find(c => c.name.toLowerCase() === prevCourse.toLowerCase() || prevCourse.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(prevCourse.toLowerCase()));
+          if (match) newFormData.previousCourse = match.name;
+          else newFormData.previousCourse = prevCourse;
+        }
+      }
     });
 
     setCvFormData(newFormData);
@@ -977,7 +989,7 @@ export default function App() {
 
         await updateDoc(doc(db, 'cvs', editingCvId), updatedData);
       } else {
-        await addDoc(collection(db, 'cvs'), {
+        const newData: any = {
           ...cvFormData,
           fullName: safeFullName,
           phone: safePhone,
@@ -985,10 +997,13 @@ export default function App() {
           guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
           phoneLast4,
           status: isReenroll ? 'approved' : 'pending',
-          appApproved: isReenroll ? true : undefined,
           type: isReenroll ? 'reenroll' : 'new',
           createdAt: serverTimestamp()
-        });
+        };
+        if (isReenroll) {
+          newData.appApproved = true;
+        }
+        await addDoc(collection(db, 'cvs'), newData);
       }
       setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', password: '', paymentImageUrl: '', guideName: '', guidePhoneLast4: '', previousCourse: '' });
       setCvAutoFillText('');
@@ -4276,10 +4291,15 @@ export default function App() {
                   <button
                     key={tab.id}
                     onClick={() => {
-                      setCvModalTab(tab.id as any);
-                      setFoundCVs([]);
-                      setCvSearchPIN('');
-                      setCvSearchPhoneLast4('');
+                      if (cvModalTab !== tab.id) {
+                        setCvModalTab(tab.id as any);
+                        setFoundCVs([]);
+                        setCvSearchPIN('');
+                        setCvSearchPhoneLast4('');
+                        setCvAutoFillText('');
+                        setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', guideName: '', guidePhoneLast4: '', password: '', paymentImageUrl: '', previousCourse: '' });
+                        setEditingCvId(null);
+                      }
                     }}
                     className={cn(
                       "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all",
@@ -4466,6 +4486,20 @@ export default function App() {
               ) : cvModalTab === 'reenroll' ? (
                 <>
                   <form onSubmit={handleCVSubmit} className="space-y-6">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Dán thông tin từ văn bản (Hệ thống tự điền)</label>
+                       <textarea 
+                         placeholder="Coppy và dán nội dung đăng ký tại đây..." 
+                         rows={4}
+                         value={cvAutoFillText}
+                         onChange={(e) => handleCVAutoFill(e.target.value)}
+                         className="w-full px-5 py-3.5 bg-yellow-50 border border-yellow-100 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-medium text-sm resize-none italic" 
+                       />
+                       <div className="bg-slate-50 p-3 rounded-xl text-[10px] text-slate-500 font-medium leading-relaxed">
+                         Hướng dẫn: Dán nội dung theo định dạng "Họ tên...", "Điện thoại..." để tự động điền các trường bên dưới.
+                       </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Họ tên học viên *</label>
