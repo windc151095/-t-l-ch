@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { GoogleGenAI } from '@google/genai';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -68,7 +69,8 @@ import {
   SlidersHorizontal,
   ArrowLeft,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  BookOpen
 } from 'lucide-react';
 import { 
   collection, 
@@ -133,6 +135,7 @@ interface Course {
   companions?: string[];
   studyGroups?: string[];
   tracking?: Record<string, any>;
+  removedStudentIds?: string[];
 }
 
 interface CV {
@@ -278,6 +281,8 @@ export default function App() {
   const [selectedStudentIdsForAssign, setSelectedStudentIdsForAssign] = useState<string[]>([]);
   const [bulkAssignInput, setBulkAssignInput] = useState('');
   const [newEntityName, setNewEntityName] = useState('');
+  const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const handleCopyTemplate = async () => {
     const cvTemplate = `CV - ĐĂNG KÝ HỌC TẬP\n........................................\n1. Họ tên:\n2. Điện thoại:\n3. Tuổi:\n4. Địa Chỉ:\n5. Công Việc:\n6. Mong muốn:`;
@@ -560,6 +565,8 @@ export default function App() {
     };
   }, [isAdmin]);
 
+  // Removed aggressive auto-update logic because user wants to manually select students.
+  /*
   useEffect(() => {
     if (!isAdmin || cvs.length === 0 || courses.length === 0) return;
     
@@ -571,7 +578,7 @@ export default function App() {
         const end = new Date(course.endDate).setHours(23,59,59,999);
         const newIds = cvs.filter(cv => {
           const cvDate = cv.createdAt ? (cv.createdAt.toDate ? cv.createdAt.toDate().getTime() : (typeof cv.createdAt === 'number' ? cv.createdAt : new Date(cv.createdAt).getTime())) : 0;
-          return cvDate >= start && cvDate <= end && !course.studentIds.includes(cv.id);
+          return cvDate >= start && cvDate <= end && !course.studentIds.includes(cv.id) && !(course.removedStudentIds || []).includes(cv.id);
         }).map(c => c.id);
 
         if (newIds.length > 0) {
@@ -586,6 +593,7 @@ export default function App() {
       }
     });
   }, [cvs, courses, isAdmin]);
+  */
 
   const formatTime = (h: number) => {
     const hh = Math.floor(h);
@@ -972,8 +980,8 @@ export default function App() {
           ...cvFormData,
           fullName: safeFullName,
           phone: safePhone,
-          password: cvFormData.password.trim(),
-          guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
+          password: isReenroll && !cvFormData.password ? '0000' : cvFormData.password.trim(),
+          guidePhoneLast4: isReenroll && !cvFormData.guidePhoneLast4 ? '0000' : cvFormData.guidePhoneLast4.trim(),
           phoneLast4
         };
         
@@ -993,8 +1001,8 @@ export default function App() {
           ...cvFormData,
           fullName: safeFullName,
           phone: safePhone,
-          password: cvFormData.password.trim(),
-          guidePhoneLast4: cvFormData.guidePhoneLast4.trim(),
+          password: isReenroll && !cvFormData.password ? '0000' : cvFormData.password.trim(),
+          guidePhoneLast4: isReenroll && !cvFormData.guidePhoneLast4 ? '0000' : cvFormData.guidePhoneLast4.trim(),
           phoneLast4,
           status: isReenroll ? 'approved' : 'pending',
           type: isReenroll ? 'reenroll' : 'new',
@@ -1035,12 +1043,13 @@ export default function App() {
       job: cv.job || '',
       target: cv.target || '',
       guideName: cv.guideName,
-      guidePhoneLast4: cv.guidePhoneLast4,
-      password: cv.password,
-      paymentImageUrl: cv.paymentImageUrl || ''
+      guidePhoneLast4: cv.guidePhoneLast4 || '',
+      password: cv.password || '',
+      paymentImageUrl: cv.paymentImageUrl || '',
+      previousCourse: cv.previousCourse || ''
     });
     setEditingCvId(cv.id);
-    setCvModalTab('create');
+    setCvModalTab(cv.type === 'reenroll' ? 'reenroll' : 'create');
     setShowCVModal(true);
   };
 
@@ -3351,6 +3360,77 @@ export default function App() {
 
                                           return (
                                             <div className="flex flex-col gap-8">
+                                              <div className="flex justify-between items-center bg-purple-50 p-6 rounded-2xl border border-purple-100">
+                                                <div className="pr-4 border-r border-purple-200">
+                                                  <h3 className="font-bold text-lg text-purple-900 mb-1 flex items-center gap-2">
+                                                    <BookOpen size={20} className="text-purple-600" />
+                                                    Phân tích AI
+                                                  </h3>
+                                                  <p className="text-sm text-purple-700">Trí tuệ nhân tạo sẽ phân tích chỉ số học viên, ngành nghề, độ tuổi và theo dõi tiến độ để đưa ra chiến lược phù hợp.</p>
+                                                </div>
+                                                <button 
+                                                  disabled={isAnalyzing}
+                                                  onClick={async () => {
+                                                    const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+                                                    if (!apiKey) {
+                                                      setChromeAlert("Chưa cấu hình GEMINI_API_KEY trong hệ thống.");
+                                                      return;
+                                                    }
+                                                    setIsAnalyzing(true);
+                                                    setAiAnalysisResult(null);
+                                                    try {
+                                                      const ai = new GoogleGenAI({ apiKey });
+                                                      const data = sortedForAnalytics.map(c => ({
+                                                        age: c.age,
+                                                        job: c.job,
+                                                        companion: c.companion || 'Chưa phân bổ',
+                                                        group: c.studyGroup || 'Chưa nhóm',
+                                                        completedLessons: c.completedLessons,
+                                                        stars: c.stars
+                                                      }));
+                                                      const prompt = `Phân tích dữ liệu học tập ẩn danh của học viên khóa ${course.name}:\n\n${JSON.stringify(data)}\n\nYêu cầu phân tích chỉ số tuổi, phổ biến ngành nghề, và tổng kết hiệu suất thực hành/học tập từ dữ liệu trên. Từ đó, vui lòng gợi ý chiến lược ngắn gọn (trọng tâm vào vai trò người đồng hành và group học tập) nhằm tăng tỷ lệ duy trì và hiệu suất học tập. Hãy format response bằng markdown ngắn gọn.`;
+                                                      const response = await ai.models.generateContent({
+                                                          model: "gemini-2.5-flash",
+                                                          contents: prompt,
+                                                      });
+                                                      setAiAnalysisResult(response.text);
+                                                    } catch (e) {
+                                                      console.error(e);
+                                                      setChromeAlert("Lỗi khi phân tích dữ liệu.");
+                                                    } finally {
+                                                      setIsAnalyzing(false);
+                                                    }
+                                                  }}
+                                                  className="ml-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-200 transition-all active:scale-95 whitespace-nowrap"
+                                                >
+                                                  {isAnalyzing ? "ĐANG PHÂN TÍCH..." : "BẮT ĐẦU PHÂN TÍCH"}
+                                                </button>
+                                              </div>
+
+                                              {aiAnalysisResult && (
+                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm overflow-auto markdown-body">
+                                                  <div className="text-slate-700 text-sm leading-relaxed space-y-4">
+                                                    {aiAnalysisResult.split('\n').map((line, i) => {
+                                                      if (!line.trim()) return null;
+                                                      
+                                                      // Basic bold parsing
+                                                      const parts = line.split(/(\*\*.*?\*\*)/g);
+                                                      
+                                                      return (
+                                                        <p key={i} className={line.startsWith('#') || line.startsWith('**') ? 'mt-4' : 'mt-1'}>
+                                                          {parts.map((p, j) => {
+                                                            if (p.startsWith('**') && p.endsWith('**')) {
+                                                              return <strong key={j} className="font-bold text-slate-900">{p.slice(2, -2)}</strong>;
+                                                            }
+                                                            return p;
+                                                          })}
+                                                        </p>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                </div>
+                                              )}
+
                                               <div className="flex flex-col gap-2">
                                                 <h3 className="font-bold text-lg text-slate-800">Hiệu suất theo Group học tập</h3>
                                                 <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50">
@@ -3625,6 +3705,7 @@ export default function App() {
                                                   className="flex-1 min-w-[200px] border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
                                                 >
                                                   <option value="">-- Chọn Người đồng hành --</option>
+                                                  <option value="CLEAR_ASSIGNMENT">-- Bỏ phân bổ (Xóa trắng) --</option>
                                                   {(course.companions || []).map(c => (
                                                     <option key={c} value={c}>{c}</option>
                                                   ))}
@@ -3633,17 +3714,18 @@ export default function App() {
                                                   onClick={async () => {
                                                     if (!bulkAssignInput.trim() || selectedStudentIdsForAssign.length === 0) return;
                                                     try {
-                                                      await Promise.all(selectedStudentIdsForAssign.map(id => updateDoc(doc(db, 'cvs', id), { companion: bulkAssignInput.trim() })));
+                                                      const valueToSet = bulkAssignInput === 'CLEAR_ASSIGNMENT' ? deleteField() : bulkAssignInput.trim();
+                                                      await Promise.all(selectedStudentIdsForAssign.map(id => updateDoc(doc(db, 'cvs', id), { companion: valueToSet })));
                                                       setBulkAssignInput('');
                                                       setSelectedStudentIdsForAssign([]);
-                                                      setChromeAlert("Đã phân bổ Người đồng hành thành công!");
+                                                      setChromeAlert("Đã cập nhật phân bổ thành công!");
                                                     } catch (e) {
                                                       console.error(e);
                                                     }
                                                   }}
                                                   className="px-6 py-2 bg-purple-600 shrink-0 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-200"
                                                 >
-                                                  Phân bổ
+                                                  Cập nhật
                                                 </button>
                                               </div>
                                             </div>
@@ -3696,6 +3778,7 @@ export default function App() {
 
                                                       await updateDoc(doc(db, 'courses', course.id), {
                                                         studentIds: course.studentIds.filter(id => id !== cv.id),
+                                                        removedStudentIds: [...(course.removedStudentIds || []), cv.id],
                                                         tracking: updatedTracking
                                                       });
                                                       await updateDoc(doc(db, 'cvs', cv.id), {
@@ -3738,6 +3821,7 @@ export default function App() {
                                                   className="flex-1 min-w-[200px] border border-slate-200 bg-white rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
                                                 >
                                                   <option value="">-- Chọn Group học tập --</option>
+                                                  <option value="CLEAR_ASSIGNMENT">-- Bỏ phân bổ (Xóa trắng) --</option>
                                                   {(course.studyGroups || []).map(g => (
                                                     <option key={g} value={g}>{g}</option>
                                                   ))}
@@ -3746,17 +3830,18 @@ export default function App() {
                                                   onClick={async () => {
                                                     if (!bulkAssignInput.trim() || selectedStudentIdsForAssign.length === 0) return;
                                                     try {
-                                                      await Promise.all(selectedStudentIdsForAssign.map(id => updateDoc(doc(db, 'cvs', id), { studyGroup: bulkAssignInput.trim() })));
+                                                      const valueToSet = bulkAssignInput === 'CLEAR_ASSIGNMENT' ? deleteField() : bulkAssignInput.trim();
+                                                      await Promise.all(selectedStudentIdsForAssign.map(id => updateDoc(doc(db, 'cvs', id), { studyGroup: valueToSet })));
                                                       setBulkAssignInput('');
                                                       setSelectedStudentIdsForAssign([]);
-                                                      setChromeAlert("Đã phân bổ Group học tập thành công!");
+                                                      setChromeAlert("Đã cập nhật phân bổ thành công!");
                                                     } catch (e) {
                                                       console.error(e);
                                                     }
                                                   }}
                                                   className="px-6 py-2 bg-purple-600 shrink-0 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-purple-700 transition-colors shadow-md shadow-purple-200"
                                                 >
-                                                  Phân bổ
+                                                  Cập nhật
                                                 </button>
                                               </div>
                                             </div>
@@ -3835,12 +3920,13 @@ export default function App() {
 
                                                                 await updateDoc(doc(db, 'courses', course.id), {
                                                                   studentIds: course.studentIds.filter(id => id !== cv.id),
+                                                                  removedStudentIds: [...(course.removedStudentIds || []), cv.id],
                                                                   tracking: updatedTracking
                                                                 });
                                                                 await updateDoc(doc(db, 'cvs', cv.id), {
-                                                                  companion: '',
-                                                                  studyGroup: '',
-                                                                  studentId: ''
+                                                                  companion: deleteField(),
+                                                                  studyGroup: deleteField(),
+                                                                  studentId: deleteField()
                                                                 });
                                                               }}
                                                               className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 shadow-sm"
@@ -4499,31 +4585,31 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Họ tên học viên *</label>
-                        <input required type="text" placeholder="Nguyễn Văn A" 
+                        <input type="text" placeholder="Nguyễn Văn A" 
                           value={cvFormData.fullName} onChange={(e) => setCvFormData({ ...cvFormData, fullName: e.target.value })}
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
                       </div>
                       <div className="space-y-2">
                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Điện thoại *</label>
-                         <input required type="tel" placeholder="090..." 
+                         <input type="tel" placeholder="090..." 
                           value={cvFormData.phone} onChange={(e) => setCvFormData({ ...cvFormData, phone: e.target.value })}
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tuổi *</label>
-                        <input required type="text" placeholder="25" 
+                        <input type="text" placeholder="25" 
                           value={cvFormData.age} onChange={(e) => setCvFormData({ ...cvFormData, age: e.target.value })}
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
                       </div>
                       <div className="space-y-2">
                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tên hướng dẫn viên *</label>
-                         <input required type="text" placeholder="Tên người hướng dẫn..." 
+                         <input type="text" placeholder="Tên người hướng dẫn..." 
                           value={cvFormData.guideName} onChange={(e) => setCvFormData({ ...cvFormData, guideName: e.target.value })}
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
                       </div>
                       <div className="space-y-2 md:col-span-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Khóa đã tham gia *</label>
-                        <input required type="text" placeholder="Tên khóa hoặc mã khóa..." 
+                        <input type="text" placeholder="Tên khóa hoặc mã khóa..." 
                           value={cvFormData.previousCourse || ''} onChange={(e) => setCvFormData({ ...cvFormData, previousCourse: e.target.value })}
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm text-slate-700" />
                       </div>
@@ -5237,7 +5323,6 @@ export default function App() {
                     onChange={e => setCourseForm(prev => ({ ...prev, closingDate: e.target.value }))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all"
                   />
-                  <p className="text-xs text-slate-400 mt-1.5 italic">Hệ thống sẽ tự động cập nhật học viên mới thỏa mãn điều kiện thời gian cho đến hết Ngày chốt danh sách.</p>
                 </div>
               </div>
 
@@ -5306,13 +5391,17 @@ export default function App() {
                         if (course) {
                           const removedIds = course.studentIds.filter(id => !selectedLearningCvIds.includes(id));
                           if (removedIds.length > 0) {
-                            await Promise.all(removedIds.map(id => 
-                              updateDoc(doc(db, 'cvs', id), {
-                                companion: deleteField(),
-                                studyGroup: deleteField(),
-                                studentId: deleteField()
-                              })
-                            ));
+                            await Promise.all(removedIds.map(async id => {
+                              try {
+                                await updateDoc(doc(db, 'cvs', id), {
+                                  companion: deleteField(),
+                                  studyGroup: deleteField(),
+                                  studentId: deleteField()
+                                });
+                              } catch (err) {
+                                console.warn("CV may have been deleted", err);
+                              }
+                            }));
                             
                             const updatedTracking = course.tracking ? { ...course.tracking } : {};
                             removedIds.forEach(id => {
@@ -5325,6 +5414,7 @@ export default function App() {
                               endDate: courseForm.end,
                               closingDate: courseForm.closingDate,
                               studentIds: selectedLearningCvIds,
+                              removedStudentIds: [...(course.removedStudentIds || []), ...removedIds],
                               tracking: updatedTracking
                             });
                             setChromeAlert("Đã cập nhật khóa học!");
