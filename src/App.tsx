@@ -4486,20 +4486,6 @@ export default function App() {
               ) : cvModalTab === 'reenroll' ? (
                 <>
                   <form onSubmit={handleCVSubmit} className="space-y-6">
-                    <div className="space-y-2">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Dán thông tin từ văn bản (Hệ thống tự điền)</label>
-                       <textarea 
-                         placeholder="Coppy và dán nội dung đăng ký tại đây..." 
-                         rows={4}
-                         value={cvAutoFillText}
-                         onChange={(e) => handleCVAutoFill(e.target.value)}
-                         className="w-full px-5 py-3.5 bg-yellow-50 border border-yellow-100 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-medium text-sm resize-none italic" 
-                       />
-                       <div className="bg-slate-50 p-3 rounded-xl text-[10px] text-slate-500 font-medium leading-relaxed">
-                         Hướng dẫn: Dán nội dung theo định dạng "Họ tên...", "Điện thoại..." để tự động điền các trường bên dưới.
-                       </div>
-                    </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Họ tên học viên *</label>
