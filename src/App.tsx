@@ -1007,14 +1007,16 @@ export default function App() {
       }
       setCvFormData({ fullName: '', phone: '', age: '', address: '', job: '', target: '', password: '', paymentImageUrl: '', guideName: '', guidePhoneLast4: '', previousCourse: '' });
       setCvAutoFillText('');
-      setEditingCvId(null);
+      
+      if (editingCvId) {
+        // Keep the modal open behind the success dialog, or we can close it. We'll close the main CV modal here.
+        setShowCVModal(false);
+        setEditingCvId(null);
+      }
+      
       setCvModalTab(isReenroll ? 'reenroll' : 'create');
       setShowCVSaveSuccess(true);
-      if (editingCvId) {
-        setChromeAlert("Cập nhật CV thành công!");
-        setShowCVSaveSuccess(false);
-        setShowCVModal(false);
-      }
+      
     } catch (err) {
       console.error("CV submit error:", err);
       handleFirestoreError(err, editingCvId ? 'update' : 'create', editingCvId ? `cvs/${editingCvId}` : 'cvs');
@@ -3478,18 +3480,26 @@ export default function App() {
                                                           <React.Fragment key={b.id}>
                                                             <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
                                                               <button 
-                                                                onClick={() => updateTracking(b.id, 'hoc', !(track[b.id]?.hoc))}
+                                                                onClick={() => {
+                                                                  let nextVal;
+                                                                  const current = track[b.id]?.hoc;
+                                                                  if (current === true) nextVal = false;
+                                                                  else if (current === false) nextVal = null;
+                                                                  else nextVal = true;
+                                                                  updateTracking(b.id, 'hoc', nextVal);
+                                                                }}
                                                                 className="text-sm w-full h-full flex justify-center items-center rounded hover:bg-[#FFE082]"
                                                               >
-                                                                {track[b.id]?.hoc ? '✅' : '❌'}
+                                                                {track[b.id]?.hoc === true ? '✅' : track[b.id]?.hoc === false ? '❌' : ''}
                                                               </button>
                                                             </td>
                                                             <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
                                                               <select
-                                                                value={track[b.id]?.hanh || '🖤'}
+                                                                value={track[b.id]?.hanh || ''}
                                                                 onChange={(e) => updateTracking(b.id, 'hanh', e.target.value)}
                                                                 className="bg-transparent text-xs w-[55px] font-bold outline-none cursor-pointer text-center appearance-none"
                                                               >
+                                                                <option value=""></option>
                                                                 <option value="🖤">🖤</option>
                                                                 <option value="⭐">⭐</option>
                                                                 <option value="⭐⭐">⭐⭐</option>
@@ -3689,9 +3699,9 @@ export default function App() {
                                                         tracking: updatedTracking
                                                       });
                                                       await updateDoc(doc(db, 'cvs', cv.id), {
-                                                        companion: '',
-                                                        studyGroup: '',
-                                                        studentId: ''
+                                                        companion: deleteField(),
+                                                        studyGroup: deleteField(),
+                                                        studentId: deleteField()
                                                       });
                                                     }}
                                                     className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 shadow-sm"
@@ -4182,9 +4192,9 @@ export default function App() {
                   <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-500 mb-2">
                     <Check size={32} strokeWidth={3} />
                   </div>
-                  <h4 className="text-lg font-bold text-slate-800">Đã tạo CV thành công!</h4>
+                  <h4 className="text-lg font-bold text-slate-800">Đã lưu CV thành công!</h4>
                   <p className="text-sm font-medium text-slate-600">
-                    Hồ sơ của bạn đã được gửi đi. Vui lòng chờ bộ phận quản lý phê duyệt.
+                    Hồ sơ của bạn đã được ghi nhận. Vui lòng chờ bộ phận quản lý phê duyệt.
                   </p>
                 </div>
 
@@ -4512,16 +4522,10 @@ export default function App() {
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
                       </div>
                       <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tham gia *</label>
-                        <select required 
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Khóa đã tham gia *</label>
+                        <input required type="text" placeholder="Tên khóa hoặc mã khóa..." 
                           value={cvFormData.previousCourse || ''} onChange={(e) => setCvFormData({ ...cvFormData, previousCourse: e.target.value })}
-                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm text-slate-700"
-                        >
-                          <option value="">-- Vui lòng chọn --</option>
-                          {courses.map(course => (
-                            <option key={course.id} value={course.name}>{course.name}</option>
-                          ))}
-                        </select>
+                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm text-slate-700" />
                       </div>
                     </div>
 
@@ -5291,7 +5295,7 @@ export default function App() {
                       setChromeAlert("Vui lòng nhập đầy đủ Tên khóa học, thời gian và ngày chốt danh sách.");
                       return;
                     }
-                    if (selectedLearningCvIds.length === 0) {
+                    if (!editingCourseId && selectedLearningCvIds.length === 0) {
                       setChromeAlert("Vui lòng chọn ít nhất 1 học viên.");
                       return;
                     }
@@ -5304,9 +5308,9 @@ export default function App() {
                           if (removedIds.length > 0) {
                             await Promise.all(removedIds.map(id => 
                               updateDoc(doc(db, 'cvs', id), {
-                                companion: '',
-                                studyGroup: '',
-                                studentId: ''
+                                companion: deleteField(),
+                                studyGroup: deleteField(),
+                                studentId: deleteField()
                               })
                             ));
                             
