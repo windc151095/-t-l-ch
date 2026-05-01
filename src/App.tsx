@@ -3,7 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell
+} from 'recharts';
 import { 
   format, 
   addDays, 
@@ -269,7 +273,7 @@ export default function App() {
   const [selectedLearningCvIds, setSelectedLearningCvIds] = useState<string[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  const [courseDetailTab, setCourseDetailTab] = useState<'companion' | 'group' | 'tracking'>('companion');
+  const [courseDetailTab, setCourseDetailTab] = useState<'companion' | 'group' | 'tracking' | 'analytics'>('companion');
   const [assignFilter, setAssignFilter] = useState<string>('all');
   const [selectedStudentIdsForAssign, setSelectedStudentIdsForAssign] = useState<string[]>([]);
   const [bulkAssignInput, setBulkAssignInput] = useState('');
@@ -299,6 +303,30 @@ export default function App() {
   const [adminPinInput, setAdminPinInput] = useState('');
   const [isProcessingAction, setIsProcessingAction] = useState(false);
   const hasAutoSwitchedRef = useRef(false);
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    show: boolean;
+    message: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }>({ show: false, message: '', onConfirm: () => {}, onCancel: () => {} });
+
+  const customConfirm = (message: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setConfirmDialog({
+        show: true,
+        message,
+        onConfirm: () => {
+          setConfirmDialog(prev => ({ ...prev, show: false }));
+          resolve(true);
+        },
+        onCancel: () => {
+          setConfirmDialog(prev => ({ ...prev, show: false }));
+          resolve(false);
+        }
+      });
+    });
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 10000); // update every 10 seconds for smoothness
@@ -3026,7 +3054,7 @@ export default function App() {
                                               <button 
                                                 onClick={async (e) => {
                                                   e.stopPropagation();
-                                                  if(window.confirm('Bạn có chắc muốn xóa khóa học này?')) {
+                                                  if(await customConfirm('Bạn có chắc muốn xóa khóa học này?')) {
                                                     await deleteDoc(doc(db, 'courses', course.id));
                                                     setSelectedCourseId(null);
                                                   }
@@ -3043,7 +3071,7 @@ export default function App() {
                                       <div className="flex items-center gap-2">
                                         <button 
                                           onClick={async () => {
-                                            if (!window.confirm("Tạo mã học viên định dạng HV-01 tự động xếp theo Người Đồng Hành?")) return;
+                                            if (!await customConfirm("Tạo mã học viên định dạng HV-01 tự động xếp theo Người Đồng Hành?")) return;
                                             
                                             // Sort by Companion -> Name
                                             const sorted = [...enrolledCvs].sort((a, b) => {
@@ -3091,13 +3119,13 @@ export default function App() {
                                             // Row 1
                                             aoa.push([
                                               "STT", "NGƯỜI ĐỒNG HÀNH", "MÃ HỌC VIÊN", "HỌ TÊN", "TUỔI", "HDV", "GROUP HỌC TẬP", "FACEBOOK", 
-                                              "BUỔI ĐỊNH HÌNH", "", "BUỔI 1", "", "BUỔI 2", "", "BUỔI 3", "", "BUỔI 4", ""
+                                              "BUỔI ĐỊNH HÌNH", "", "BUỔI 1", "", "BUỔI 2", "", "BUỔI 3", "", "BUỔI 4", "", "BUỔI 5", "", "BUỔI 6", ""
                                             ]);
 
                                             // Row 2
                                             aoa.push([
                                               "", "", "", "", "", "", "", "",
-                                              "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH"
+                                              "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH"
                                             ]);
 
                                             // Data Rows
@@ -3114,7 +3142,7 @@ export default function App() {
                                                 cv.facebookLink ? "Link" : "",
                                               ];
                                               
-                                              ['buoiDinhHinh', 'buoi1', 'buoi2', 'buoi3', 'buoi4'].forEach(b => {
+                                              ['buoiDinhHinh', 'buoi1', 'buoi2', 'buoi3', 'buoi4', 'buoi5', 'buoi6'].forEach(b => {
                                                 rowData.push(track[b]?.hoc ? "✅" : "❌");
                                                 rowData.push(track[b]?.hanh || "🖤");
                                               });
@@ -3126,8 +3154,8 @@ export default function App() {
 
                                             // Styling & Merges
                                             ws['!merges'] = [
-                                              // Row 0 merge over 18 cols
-                                              { s: { r: 0, c: 0 }, e: { r: 0, c: 17 } },
+                                              // Row 0 merge over 22 cols
+                                              { s: { r: 0, c: 0 }, e: { r: 0, c: 21 } },
                                               // Row 1 merges down to row 2 for first 8 cols
                                               { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
                                               { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } },
@@ -3142,7 +3170,9 @@ export default function App() {
                                               { s: { r: 1, c: 10 }, e: { r: 1, c: 11 } },
                                               { s: { r: 1, c: 12 }, e: { r: 1, c: 13 } },
                                               { s: { r: 1, c: 14 }, e: { r: 1, c: 15 } },
-                                              { s: { r: 1, c: 16 }, e: { r: 1, c: 17 } }
+                                              { s: { r: 1, c: 16 }, e: { r: 1, c: 17 } },
+                                              { s: { r: 1, c: 18 }, e: { r: 1, c: 19 } },
+                                              { s: { r: 1, c: 20 }, e: { r: 1, c: 21 } }
                                             ];
 
                                             const CCE5CC = "CCE5CC";
@@ -3152,7 +3182,7 @@ export default function App() {
                                             
                                             // Apply Styles
                                             for (let R = 0; R <= aoa.length - 1; ++R) {
-                                              for (let C = 0; C <= 17; ++C) {
+                                              for (let C = 0; C <= 21; ++C) {
                                                 const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
                                                 if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' }; // fill empty
                                                 
@@ -3205,6 +3235,8 @@ export default function App() {
                                               { wch: 6 }, { wch: 10 }, // B2
                                               { wch: 6 }, { wch: 10 }, // B3
                                               { wch: 6 }, { wch: 10 }, // B4
+                                              { wch: 6 }, { wch: 10 }, // B5
+                                              { wch: 6 }, { wch: 10 }, // B6
                                             ];
 
                                             const wb = XLSX.utils.book_new();
@@ -3220,7 +3252,10 @@ export default function App() {
                                     </div>
                                     <div className="flex flex-col lg:flex-row gap-6">
                                       {/* Left Tabs pane */}
-                                      <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2">
+                                      <div className="w-full lg:w-56 shrink-0 flex flex-col gap-2">
+                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mb-1">
+                                          Công tác phân bổ
+                                        </div>
                                         <button 
                                           onClick={() => { setCourseDetailTab('companion'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
                                           className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'companion' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
@@ -3233,23 +3268,115 @@ export default function App() {
                                         >
                                           Phân bổ Group học tập
                                         </button>
+                                        
+                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mt-4 mb-1">
+                                          Bảng theo dõi học tập
+                                        </div>
                                         <button 
                                           onClick={() => { setCourseDetailTab('tracking'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
-                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'tracking' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'tracking' ? "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
                                         >
-                                          Bảng theo dõi học tập
+                                          Bảng theo dõi học tập ({course.tracking ? Object.keys(course.tracking).length : 0} HC)
+                                        </button>
+                                        <button 
+                                          onClick={() => { setCourseDetailTab('analytics'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
+                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'analytics' ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                        >
+                                          Phân tích chỉ số học tập
                                         </button>
                                       </div>
 
                                       {/* Right Content pane */}
                                       <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-6 w-[0]">
                                         
-                                        {courseDetailTab === 'tracking' ? (
+                                        {courseDetailTab === 'analytics' ? (() => {
+                                          const sortedForAnalytics = enrolledCvs.map(cv => {
+                                            const track = course.tracking?.[cv.id] || {};
+                                            let completedLessons = 0;
+                                            ['buoiDinhHinh', 'buoi1', 'buoi2', 'buoi3', 'buoi4', 'buoi5', 'buoi6'].forEach(b => {
+                                              if (track[b]?.hoc) completedLessons++;
+                                            });
+                                            let stars = 0;
+                                            ['buoiDinhHinh', 'buoi1', 'buoi2', 'buoi3', 'buoi4', 'buoi5', 'buoi6'].forEach(b => {
+                                              const hanh = track[b]?.hanh;
+                                              if (hanh === '⭐') stars += 1;
+                                              else if (hanh === '⭐⭐') stars += 2;
+                                              else if (hanh === '❤️❤️❤️') stars += 3;
+                                            });
+                                            return { ...cv, completedLessons, stars };
+                                          });
+                                          
+                                          const groupStats = Array.from(new Set(sortedForAnalytics.map(c => c.studyGroup || "Chưa nhóm"))).map(group => {
+                                            const studentsInGroup = sortedForAnalytics.filter(c => (c.studyGroup || "Chưa nhóm") === group);
+                                            const totalLessons = studentsInGroup.reduce((sum, c) => sum + c.completedLessons, 0);
+                                            const totalStars = studentsInGroup.reduce((sum, c) => sum + c.stars, 0);
+                                            const maxPossibleLessons = studentsInGroup.length * 7;
+                                            return {
+                                              name: group,
+                                              hocRate: maxPossibleLessons ? (totalLessons / maxPossibleLessons) * 100 : 0,
+                                              stars: totalStars,
+                                              studentCount: studentsInGroup.length
+                                            };
+                                          }).sort((a, b) => b.hocRate - a.hocRate);
+
+                                          const companionStats = Array.from(new Set(sortedForAnalytics.map(c => c.companion || "Chưa có"))).map(comp => {
+                                            const students = sortedForAnalytics.filter(c => (c.companion || "Chưa có") === comp);
+                                            const totalLessons = students.reduce((sum, c) => sum + c.completedLessons, 0);
+                                            const totalStars = students.reduce((sum, c) => sum + c.stars, 0);
+                                            const maxPossibleLessons = students.length * 7;
+                                            return {
+                                              name: comp,
+                                              hocRate: maxPossibleLessons ? (totalLessons / maxPossibleLessons) * 100 : 0,
+                                              stars: totalStars,
+                                              studentCount: students.length
+                                            };
+                                          }).sort((a, b) => b.hocRate - a.hocRate);
+
+                                          return (
+                                            <div className="flex flex-col gap-8">
+                                              <div className="flex flex-col gap-2">
+                                                <h3 className="font-bold text-lg text-slate-800">Hiệu suất theo Group học tập</h3>
+                                                <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50">
+                                                  <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={groupStats}>
+                                                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                                      <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
+                                                      <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                      <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                      <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                                      <Bar yAxisId="left" dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                                                      <Bar yAxisId="right" dataKey="stars" name="Tổng Hành (Tim/Sao)" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+                                                    </BarChart>
+                                                  </ResponsiveContainer>
+                                                </div>
+                                              </div>
+
+                                              <div className="flex flex-col gap-2">
+                                                <h3 className="font-bold text-lg text-slate-800">Hiệu suất theo Người đồng hành</h3>
+                                                <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50">
+                                                  <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart data={companionStats}>
+                                                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                                      <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
+                                                      <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                      <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                      <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                                      <Bar yAxisId="left" dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                                      <Bar yAxisId="right" dataKey="stars" name="Tổng Hành (Tim/Sao)" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+                                                    </BarChart>
+                                                  </ResponsiveContainer>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )
+                                        })() : courseDetailTab === 'tracking' ? (
                                           <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[70vh]">
                                             <table className="w-full text-sm text-left whitespace-nowrap" style={{ fontFamily: '"Google Sans", sans-serif' }}>
                                               <thead className="text-[10px] uppercase font-black text-slate-800 text-center sticky top-0 z-10 shadow-sm shadow-slate-200">
                                                 <tr>
-                                                  <th colSpan={18} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
+                                                  <th colSpan={22} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
                                                 </tr>
                                                 <tr>
                                                   <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">STT</th>
@@ -3265,7 +3392,9 @@ export default function App() {
                                                     { id: 'buoi1', label: 'BUỔI 1' },
                                                     { id: 'buoi2', label: 'BUỔI 2' },
                                                     { id: 'buoi3', label: 'BUỔI 3' },
-                                                    { id: 'buoi4', label: 'BUỔI 4' }
+                                                    { id: 'buoi4', label: 'BUỔI 4' },
+                                                    { id: 'buoi5', label: 'BUỔI 5' },
+                                                    { id: 'buoi6', label: 'BUỔI 6' }
                                                   ].map(b => (
                                                     <th key={b.id} colSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#FFE699]">
                                                       {b.label}
@@ -3273,7 +3402,7 @@ export default function App() {
                                                   ))}
                                                 </tr>
                                                 <tr>
-                                                  {[1,2,3,4,5].map(i => (
+                                                  {[1,2,3,4,5,6,7].map(i => (
                                                     <React.Fragment key={i}>
                                                       <th className="px-2 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">HỌC</th>
                                                       <th className="px-2 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">HÀNH</th>
@@ -3327,7 +3456,9 @@ export default function App() {
                                                           { id: 'buoi1' },
                                                           { id: 'buoi2' },
                                                           { id: 'buoi3' },
-                                                          { id: 'buoi4' }
+                                                          { id: 'buoi4' },
+                                                          { id: 'buoi5' },
+                                                          { id: 'buoi6' }
                                                         ].map(b => (
                                                           <React.Fragment key={b.id}>
                                                             <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
@@ -3405,7 +3536,7 @@ export default function App() {
                                                 {item} <span className="opacity-75">({assignCount})</span>
                                                 <button 
                                                   onClick={async () => {
-                                                    if (window.confirm(`Xóa ${item} khỏi danh sách?`)) {
+                                                    if (await customConfirm(`Xóa ${item} khỏi danh sách?`)) {
                                                       const field = courseDetailTab === 'companion' ? 'companions' : 'studyGroups';
                                                       const cvField = courseDetailTab === 'companion' ? 'companion' : 'studyGroup';
                                                       const currentList = course[field] || [];
@@ -3533,7 +3664,7 @@ export default function App() {
                                                   <button
                                                     onClick={async (e) => {
                                                       e.stopPropagation();
-                                                      if (!window.confirm("Bạn có chắc chắn muốn xóa học viên này khỏi khóa học?")) return;
+                                                      if (!await customConfirm("Bạn có chắc chắn muốn xóa học viên này khỏi khóa học?")) return;
                                                       
                                                       const updatedTracking = course.tracking ? { ...course.tracking } : {};
                                                       delete updatedTracking[cv.id];
@@ -3672,7 +3803,7 @@ export default function App() {
                                                             <button
                                                               onClick={async (e) => {
                                                                 e.stopPropagation();
-                                                                if (!window.confirm("Bạn có chắc chắn muốn xóa học viên này khỏi khóa học?")) return;
+                                                                if (!await customConfirm("Bạn có chắc chắn muốn xóa học viên này khỏi khóa học?")) return;
                                                                 
                                                                 const updatedTracking = course.tracking ? { ...course.tracking } : {};
                                                                 delete updatedTracking[cv.id];
@@ -5272,6 +5403,44 @@ export default function App() {
                   Xác nhận đăng nhập
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {confirmDialog.show && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={confirmDialog.onCancel}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10 p-6 border border-slate-100"
+            >
+              <h3 className="text-lg font-bold text-slate-800 mb-2">Thông báo</h3>
+              <p className="text-sm text-slate-600 mb-8">{confirmDialog.message}</p>
+              
+              <div className="flex justify-end gap-3">
+                <button 
+                  onClick={confirmDialog.onCancel}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmDialog.onConfirm}
+                  className="px-5 py-2.5 rounded-xl font-bold text-sm bg-purple-600 text-white hover:bg-purple-700 shadow-md shadow-purple-200 transition-colors"
+                >
+                  OK
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
