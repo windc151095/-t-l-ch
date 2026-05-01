@@ -128,6 +128,7 @@ interface Course {
   createdAt: any;
   companions?: string[];
   studyGroups?: string[];
+  tracking?: Record<string, any>;
 }
 
 interface CV {
@@ -268,7 +269,7 @@ export default function App() {
   const [selectedLearningCvIds, setSelectedLearningCvIds] = useState<string[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  const [courseDetailTab, setCourseDetailTab] = useState<'companion' | 'group'>('companion');
+  const [courseDetailTab, setCourseDetailTab] = useState<'companion' | 'group' | 'tracking'>('companion');
   const [assignFilter, setAssignFilter] = useState<string>('all');
   const [selectedStudentIdsForAssign, setSelectedStudentIdsForAssign] = useState<string[]>([]);
   const [bulkAssignInput, setBulkAssignInput] = useState('');
@@ -894,7 +895,7 @@ export default function App() {
     e.preventDefault();
     const isReenroll = cvModalTab === 'reenroll';
 
-    if (cvFormData.password.trim().length < 4) {
+    if (!isReenroll && cvFormData.password.trim().length < 4) {
       setChromeAlert("Mã PIN phải tối thiểu 4 ký tự.");
       return;
     }
@@ -2504,7 +2505,7 @@ export default function App() {
                                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                  className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 z-20 overflow-hidden"
+                                  className="absolute left-0 sm:right-0 sm:left-auto top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 z-20 overflow-hidden"
                                 >
                                   <div className="p-2 space-y-1">
                                     {[
@@ -2704,7 +2705,7 @@ export default function App() {
                                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                       animate={{ opacity: 1, y: 0, scale: 1 }}
                                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                      className="absolute right-0 top-full mt-2 w-full sm:w-64 bg-white rounded-2xl shadow-xl border border-slate-100 z-20 overflow-hidden"
+                                      className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 z-20 overflow-hidden"
                                     >
                                       <div className="p-2 space-y-1">
                                         <button 
@@ -2979,7 +2980,7 @@ export default function App() {
                                         {cvs.filter(c => c.type === 'reenroll' && !courses.some(course => course.studentIds.includes(c.id))).length}
                                       </span>
                                     </div>
-                                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 gap-4">
                                       {renderCVList(cvs.filter(c => c.type === 'reenroll' && !courses.some(course => course.studentIds.includes(c.id))))}
                                     </div>
                                   </div>
@@ -3042,7 +3043,7 @@ export default function App() {
                                       <div className="flex items-center gap-2">
                                         <button 
                                           onClick={async () => {
-                                            if (!window.confirm("Tạo mã học viên định dạng HV-001 tự động xếp theo Người Đồng Hành?")) return;
+                                            if (!window.confirm("Tạo mã học viên định dạng HV-01 tự động xếp theo Người Đồng Hành?")) return;
                                             
                                             // Sort by Companion -> Name
                                             const sorted = [...enrolledCvs].sort((a, b) => {
@@ -3054,7 +3055,7 @@ export default function App() {
 
                                             try {
                                               await Promise.all(sorted.map((cv, index) => {
-                                                const idNum = (index + 1).toString().padStart(3, '0');
+                                                const idNum = (index + 1).toString().padStart(2, '0');
                                                 const studentId = `HV-${idNum}`;
                                                 return updateDoc(doc(db, 'cvs', cv.id), { studentId });
                                               }));
@@ -3070,21 +3071,145 @@ export default function App() {
                                         </button>
                                         <button 
                                           onClick={async () => {
-                                            const { utils, writeFile } = await import('xlsx');
-                                            const formatCVData = (items: CV[]) => items.map((cv, index) => ({
-                                              'STT': index + 1,
-                                              'Ngày tạo CV': cv.createdAt ? format(cv.createdAt.toDate ? cv.createdAt.toDate() : (typeof cv.createdAt === 'number' ? new Date(cv.createdAt) : new Date(cv.createdAt)), 'dd/MM/yyyy HH:mm') : '',
-                                              'Người đồng hành': cv.companion || '',
-                                              'Mã học viên': cv.studentId || '',
-                                              'Họ tên': cv.fullName,
-                                              'Tuổi': cv.age,
-                                              'Hướng dẫn viên': cv.guideName,
-                                              'Group học tập': cv.studyGroup || ''
-                                            }));
-                                            const ws = utils.json_to_sheet(formatCVData(enrolledCvs));
-                                            const wb = utils.book_new();
-                                            utils.book_append_sheet(wb, ws, "Khóa Học");
-                                            writeFile(wb, `KhoaHoc_${course.name}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
+                                            const XLSX = await import('xlsx-js-style');
+                                            
+                                            // Sort data same as view
+                                            const sorted = [...enrolledCvs].sort((a,b) => {
+                                              const compA = a.companion || 'ZZZ';
+                                              const compB = b.companion || 'ZZZ';
+                                              if (compA !== compB) return compA.localeCompare(compB);
+                                              const grpA = a.studyGroup || 'ZZZ';
+                                              const grpB = b.studyGroup || 'ZZZ';
+                                              if (grpA !== grpB) return grpA.localeCompare(grpB);
+                                              return a.fullName.localeCompare(b.fullName);
+                                            });
+
+                                            const aoa = [];
+                                            // Row 0
+                                            aoa.push([`DANH SÁCH ĐĂNG KÝ HỌC ${course.name}`]);
+                                            
+                                            // Row 1
+                                            aoa.push([
+                                              "STT", "NGƯỜI ĐỒNG HÀNH", "MÃ HỌC VIÊN", "HỌ TÊN", "TUỔI", "HDV", "GROUP HỌC TẬP", "FACEBOOK", 
+                                              "BUỔI ĐỊNH HÌNH", "", "BUỔI 1", "", "BUỔI 2", "", "BUỔI 3", "", "BUỔI 4", ""
+                                            ]);
+
+                                            // Row 2
+                                            aoa.push([
+                                              "", "", "", "", "", "", "", "",
+                                              "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH", "HỌC", "HÀNH"
+                                            ]);
+
+                                            // Data Rows
+                                            sorted.forEach((cv, idx) => {
+                                              const track = course.tracking?.[cv.id] || {};
+                                              const rowData = [
+                                                idx + 1,
+                                                cv.companion || "",
+                                                cv.studentId || "",
+                                                cv.fullName || "",
+                                                cv.age || "",
+                                                cv.guideName || "",
+                                                cv.studyGroup || "",
+                                                cv.facebookLink ? "Link" : "",
+                                              ];
+                                              
+                                              ['buoiDinhHinh', 'buoi1', 'buoi2', 'buoi3', 'buoi4'].forEach(b => {
+                                                rowData.push(track[b]?.hoc ? "✅" : "❌");
+                                                rowData.push(track[b]?.hanh || "🖤");
+                                              });
+                                              
+                                              aoa.push(rowData);
+                                            });
+
+                                            const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+                                            // Styling & Merges
+                                            ws['!merges'] = [
+                                              // Row 0 merge over 18 cols
+                                              { s: { r: 0, c: 0 }, e: { r: 0, c: 17 } },
+                                              // Row 1 merges down to row 2 for first 8 cols
+                                              { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } },
+                                              { s: { r: 1, c: 1 }, e: { r: 2, c: 1 } },
+                                              { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } },
+                                              { s: { r: 1, c: 3 }, e: { r: 2, c: 3 } },
+                                              { s: { r: 1, c: 4 }, e: { r: 2, c: 4 } },
+                                              { s: { r: 1, c: 5 }, e: { r: 2, c: 5 } },
+                                              { s: { r: 1, c: 6 }, e: { r: 2, c: 6 } },
+                                              { s: { r: 1, c: 7 }, e: { r: 2, c: 7 } },
+                                              // Row 1 merges across 2 cols for buoi
+                                              { s: { r: 1, c: 8 }, e: { r: 1, c: 9 } },
+                                              { s: { r: 1, c: 10 }, e: { r: 1, c: 11 } },
+                                              { s: { r: 1, c: 12 }, e: { r: 1, c: 13 } },
+                                              { s: { r: 1, c: 14 }, e: { r: 1, c: 15 } },
+                                              { s: { r: 1, c: 16 }, e: { r: 1, c: 17 } }
+                                            ];
+
+                                            const CCE5CC = "CCE5CC";
+                                            const B3D4FF = "B3D4FF";
+                                            const E5CCFF = "E5CCFF";
+                                            const FFE699 = "FFE699";
+                                            
+                                            // Apply Styles
+                                            for (let R = 0; R <= aoa.length - 1; ++R) {
+                                              for (let C = 0; C <= 17; ++C) {
+                                                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                                                if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' }; // fill empty
+                                                
+                                                let bgColor = "FFFFFF";
+                                                let bold = false;
+                                                
+                                                if (R === 0) {
+                                                  bgColor = "FFFF00";
+                                                  bold = true;
+                                                } else if (R === 1 || R === 2) {
+                                                  bold = true;
+                                                  if (C <= 2) bgColor = CCE5CC;
+                                                  else if (C <= 4) bgColor = B3D4FF;
+                                                  else if (C <= 7) bgColor = E5CCFF;
+                                                  else bgColor = FFE699;
+                                                } else {
+                                                  bold = false;
+                                                  if (C <= 2) bgColor = "E8F5E9"; 
+                                                  else if (C <= 4) bgColor = "E3F2FD";
+                                                  else if (C <= 7) bgColor = "F3E5F5";
+                                                  else bgColor = "FFF8E1";
+                                                }
+
+                                                ws[cellAddress].s = {
+                                                  font: { name: "Google Sans", sz: 10, bold: bold },
+                                                  alignment: { vertical: "center", horizontal: "center", wrapText: true },
+                                                  fill: { fgColor: { rgb: bgColor } },
+                                                  border: {
+                                                    top: { style: "thin", color: { auto: 1 } },
+                                                    bottom: { style: "thin", color: { auto: 1 } },
+                                                    left: { style: "thin", color: { auto: 1 } },
+                                                    right: { style: "thin", color: { auto: 1 } }
+                                                  }
+                                                };
+                                              }
+                                            }
+
+                                            // Adjust Column Widths
+                                            ws['!cols'] = [
+                                              { wch: 5 },  // STT
+                                              { wch: 18 }, // NGUOI DONG HANH
+                                              { wch: 12 }, // MA HOC VIEN
+                                              { wch: 20 }, // HO TEN
+                                              { wch: 6 },  // TUOI
+                                              { wch: 15 }, // HDV
+                                              { wch: 18 }, // GROUP HOC TAP
+                                              { wch: 12 }, // FACEBOOK
+                                              { wch: 6 }, { wch: 10 }, // BDH
+                                              { wch: 6 }, { wch: 10 }, // B1
+                                              { wch: 6 }, { wch: 10 }, // B2
+                                              { wch: 6 }, { wch: 10 }, // B3
+                                              { wch: 6 }, { wch: 10 }, // B4
+                                            ];
+
+                                            const wb = XLSX.utils.book_new();
+                                            XLSX.utils.book_append_sheet(wb, ws, "Khóa Học");
+                                            XLSX.writeFile(wb, `KhoaHoc_${course.name}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
                                           }}
                                           className="flex items-center gap-2 px-4 py-2.5 bg-green-50 text-green-700 border border-green-200 rounded-xl hover:bg-green-100 transition-all text-xs font-black uppercase tracking-widest"
                                         >
@@ -3108,12 +3233,136 @@ export default function App() {
                                         >
                                           Phân bổ Group học tập
                                         </button>
+                                        <button 
+                                          onClick={() => { setCourseDetailTab('tracking'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
+                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'tracking' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                        >
+                                          Bảng theo dõi học tập
+                                        </button>
                                       </div>
 
                                       {/* Right Content pane */}
-                                      <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-6">
-                                        {/* Management Section */}
-                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
+                                      <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-6 w-[0]">
+                                        
+                                        {courseDetailTab === 'tracking' ? (
+                                          <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[70vh]">
+                                            <table className="w-full text-sm text-left whitespace-nowrap" style={{ fontFamily: '"Google Sans", sans-serif' }}>
+                                              <thead className="text-[10px] uppercase font-black text-slate-800 text-center sticky top-0 z-10 shadow-sm shadow-slate-200">
+                                                <tr>
+                                                  <th colSpan={18} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
+                                                </tr>
+                                                <tr>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">STT</th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">NGƯỜI ĐỒNG HÀNH</th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">MÃ HỌC VIÊN</th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle">HỌ TÊN</th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle">TUỔI</th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">HDV</th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">GROUP HỌC TẬP</th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">FACEBOOK</th>
+                                                  {[
+                                                    { id: 'buoiDinhHinh', label: 'BUỔI ĐỊNH HÌNH' },
+                                                    { id: 'buoi1', label: 'BUỔI 1' },
+                                                    { id: 'buoi2', label: 'BUỔI 2' },
+                                                    { id: 'buoi3', label: 'BUỔI 3' },
+                                                    { id: 'buoi4', label: 'BUỔI 4' }
+                                                  ].map(b => (
+                                                    <th key={b.id} colSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#FFE699]">
+                                                      {b.label}
+                                                    </th>
+                                                  ))}
+                                                </tr>
+                                                <tr>
+                                                  {[1,2,3,4,5].map(i => (
+                                                    <React.Fragment key={i}>
+                                                      <th className="px-2 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">HỌC</th>
+                                                      <th className="px-2 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">HÀNH</th>
+                                                    </React.Fragment>
+                                                  ))}
+                                                </tr>
+                                              </thead>
+                                              <tbody className="text-[10px]">
+                                                {(() => {
+                                                  const sorted = [...enrolledCvs].sort((a,b) => {
+                                                    const compA = a.companion || 'ZZZ';
+                                                    const compB = b.companion || 'ZZZ';
+                                                    if (compA !== compB) return compA.localeCompare(compB);
+                                                    const grpA = a.studyGroup || 'ZZZ';
+                                                    const grpB = b.studyGroup || 'ZZZ';
+                                                    if (grpA !== grpB) return grpA.localeCompare(grpB);
+                                                    return a.fullName.localeCompare(b.fullName);
+                                                  });
+                                                  return sorted.map((cv, index) => {
+                                                    const track = course.tracking?.[cv.id] || {};
+                                                    const updateTracking = async (lesson: string, field: 'hoc' | 'hanh', value: any) => {
+                                                      const currentTracking = course.tracking || {};
+                                                      const currentCvTracking = currentTracking[cv.id] || {};
+                                                      const newTracking = {
+                                                        ...currentTracking,
+                                                        [cv.id]: {
+                                                          ...currentCvTracking,
+                                                          [lesson]: {
+                                                            ...currentCvTracking[lesson],
+                                                            [field]: value
+                                                          }
+                                                        }
+                                                      };
+                                                      await updateDoc(doc(db, 'courses', course.id), { tracking: newTracking });
+                                                    };
+
+                                                    return (
+                                                      <tr key={cv.id} className="border-b border-[#E2E8F0] hover:bg-slate-50 text-center font-bold text-[10px]">
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9]">{index + 1}</td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] whitespace-normal min-w-[100px]">{cv.companion}</td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] text-purple-700">{cv.studentId}</td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD] whitespace-normal min-w-[120px] text-left">{cv.fullName}</td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD]">{cv.age}</td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]">{cv.guideName}</td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]">{cv.studyGroup}</td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5] whitespace-normal min-w-[100px]">
+                                                          {cv.facebookLink ? <a href={cv.facebookLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Link</a> : ''}
+                                                        </td>
+                                                        {[
+                                                          { id: 'buoiDinhHinh' },
+                                                          { id: 'buoi1' },
+                                                          { id: 'buoi2' },
+                                                          { id: 'buoi3' },
+                                                          { id: 'buoi4' }
+                                                        ].map(b => (
+                                                          <React.Fragment key={b.id}>
+                                                            <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
+                                                              <button 
+                                                                onClick={() => updateTracking(b.id, 'hoc', !(track[b.id]?.hoc))}
+                                                                className="text-sm w-full h-full flex justify-center items-center rounded hover:bg-[#FFE082]"
+                                                              >
+                                                                {track[b.id]?.hoc ? '✅' : '❌'}
+                                                              </button>
+                                                            </td>
+                                                            <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
+                                                              <select
+                                                                value={track[b.id]?.hanh || '🖤'}
+                                                                onChange={(e) => updateTracking(b.id, 'hanh', e.target.value)}
+                                                                className="bg-transparent text-xs w-[55px] font-bold outline-none cursor-pointer text-center appearance-none"
+                                                              >
+                                                                <option value="🖤">🖤</option>
+                                                                <option value="⭐">⭐</option>
+                                                                <option value="⭐⭐">⭐⭐</option>
+                                                                <option value="❤️❤️❤️">❤️❤️❤️</option>
+                                                              </select>
+                                                            </td>
+                                                          </React.Fragment>
+                                                        ))}
+                                                      </tr>
+                                                    );
+                                                  });
+                                                })()}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            {/* Management Section */}
+                                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
                                           <h4 className="font-bold text-slate-800 text-sm">
                                             {courseDetailTab === 'companion' ? 'Danh sách Người đồng hành' : 'Danh sách Group học tập'}
                                           </h4>
@@ -3243,7 +3492,7 @@ export default function App() {
                                               </div>
                                             </div>
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[50vh] overflow-y-auto pr-2">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-2">
                                               {enrolledCvs
                                                 .filter(cv => {
                                                   if (assignFilter === 'all') return true;
@@ -3258,7 +3507,7 @@ export default function App() {
                                               }).map(cv => (
                                                 <div key={cv.id} onClick={() => {
                                                   setSelectedStudentIdsForAssign(prev => prev.includes(cv.id) ? prev.filter(i => i !== cv.id) : [...prev, cv.id]);
-                                                }} className={cn("cursor-pointer border rounded-xl p-3 flex gap-3 transition-all", selectedStudentIdsForAssign.includes(cv.id) ? "border-purple-400 bg-purple-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50")}>
+                                                }} className={cn("cursor-pointer border rounded-xl p-3 flex gap-3 transition-all relative group", selectedStudentIdsForAssign.includes(cv.id) ? "border-purple-400 bg-purple-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50")}>
                                                   <input 
                                                     type="checkbox"
                                                     className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 mt-0.5 pointer-events-none"
@@ -3281,6 +3530,29 @@ export default function App() {
                                                       </div>
                                                     </div>
                                                   </div>
+                                                  <button
+                                                    onClick={async (e) => {
+                                                      e.stopPropagation();
+                                                      if (!window.confirm("Bạn có chắc chắn muốn xóa học viên này khỏi khóa học?")) return;
+                                                      
+                                                      const updatedTracking = course.tracking ? { ...course.tracking } : {};
+                                                      delete updatedTracking[cv.id];
+
+                                                      await updateDoc(doc(db, 'courses', course.id), {
+                                                        studentIds: course.studentIds.filter(id => id !== cv.id),
+                                                        tracking: updatedTracking
+                                                      });
+                                                      await updateDoc(doc(db, 'cvs', cv.id), {
+                                                        companion: '',
+                                                        studyGroup: '',
+                                                        studentId: ''
+                                                      });
+                                                    }}
+                                                    className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 shadow-sm"
+                                                    title="Xóa khỏi khóa học"
+                                                  >
+                                                    <Trash2 size={14} />
+                                                  </button>
                                                 </div>
                                               ))}
                                             </div>
@@ -3374,7 +3646,7 @@ export default function App() {
                                                         {cvs.sort((a,b) => a.fullName.localeCompare(b.fullName)).map(cv => (
                                                           <div key={cv.id} onClick={() => {
                                                             setSelectedStudentIdsForAssign(prev => prev.includes(cv.id) ? prev.filter(i => i !== cv.id) : [...prev, cv.id]);
-                                                          }} className={cn("cursor-pointer border rounded-xl p-3 flex gap-3 transition-colors", selectedStudentIdsForAssign.includes(cv.id) ? "border-purple-400 bg-purple-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50")}>
+                                                          }} className={cn("cursor-pointer border rounded-xl p-3 flex gap-3 transition-colors relative group", selectedStudentIdsForAssign.includes(cv.id) ? "border-purple-400 bg-purple-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50")}>
                                                             <input 
                                                               type="checkbox"
                                                               className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 mt-0.5 pointer-events-none"
@@ -3397,6 +3669,29 @@ export default function App() {
                                                                 </div>
                                                               </div>
                                                             </div>
+                                                            <button
+                                                              onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                if (!window.confirm("Bạn có chắc chắn muốn xóa học viên này khỏi khóa học?")) return;
+                                                                
+                                                                const updatedTracking = course.tracking ? { ...course.tracking } : {};
+                                                                delete updatedTracking[cv.id];
+
+                                                                await updateDoc(doc(db, 'courses', course.id), {
+                                                                  studentIds: course.studentIds.filter(id => id !== cv.id),
+                                                                  tracking: updatedTracking
+                                                                });
+                                                                await updateDoc(doc(db, 'cvs', cv.id), {
+                                                                  companion: '',
+                                                                  studyGroup: '',
+                                                                  studentId: ''
+                                                                });
+                                                              }}
+                                                              className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 shadow-sm"
+                                                              title="Xóa khỏi khóa học"
+                                                            >
+                                                              <Trash2 size={14} />
+                                                            </button>
                                                           </div>
                                                         ))}
                                                       </div>
@@ -3406,6 +3701,8 @@ export default function App() {
                                               })()}
                                             </div>
                                           </div>
+                                        )}
+                                        </>
                                         )}
                                       </div>
                                     </div>
@@ -3472,7 +3769,7 @@ export default function App() {
                                           <h4 className="text-sm font-black text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">Ngày {dateStr}</h4>
                                           <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded-full">{(cvsInDate as CV[]).length} CV</span>
                                         </div>
-                                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 gap-4">
                                           {renderCVList(cvsInDate as CV[])}
                                         </div>
                                       </div>
@@ -3490,7 +3787,7 @@ export default function App() {
                                                 <h4 className="text-sm font-black text-blue-700 bg-blue-100 px-3 py-1.5 rounded-xl border border-blue-200 shadow-sm">Cần xử lý ngay</h4>
                                                 <span className="bg-white border border-blue-200 text-blue-700 text-xs font-bold px-2 py-1 rounded-full shadow-sm">{priorityCvs.length} CV</span>
                                               </div>
-                                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                              <div className="grid grid-cols-1 gap-4">
                                                 {renderCVList(priorityCvs)}
                                               </div>
                                             </div>
@@ -3501,7 +3798,7 @@ export default function App() {
                                                 <h4 className="text-sm font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">Đã xử lý (Hoàn thành / Từ chối)</h4>
                                                 <span className="bg-white border border-slate-200 text-slate-600 text-xs font-bold px-2 py-1 rounded-full shadow-sm">{otherCvs.length} CV</span>
                                               </div>
-                                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                              <div className="grid grid-cols-1 gap-4">
                                                 {renderCVList(otherCvs)}
                                               </div>
                                             </div>
@@ -4064,28 +4361,16 @@ export default function App() {
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm" />
                       </div>
                       <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Khóa tham gia *</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tham gia *</label>
                         <select required 
                           value={cvFormData.previousCourse || ''} onChange={(e) => setCvFormData({ ...cvFormData, previousCourse: e.target.value })}
                           className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-bold text-sm text-slate-700"
                         >
-                          <option value="">-- Chọn Khóa Học đã tạo --</option>
+                          <option value="">-- Vui lòng chọn --</option>
                           {courses.map(course => (
                             <option key={course.id} value={course.name}>{course.name}</option>
                           ))}
                         </select>
-                      </div>
-                    </div>
-
-                    <div className="pt-4 mt-8 border-t border-slate-100 space-y-4">
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-[10px] text-slate-500 font-bold mb-4">
-                        Thông tin bảo mật để bạn có thể tự tra cứu tình trạng ứng tuyển (Sẽ áp dụng chung vào tính năng Tìm kiếm CV)
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mã PIN bảo mật CV *</label>
-                        <input required type="password" placeholder="Tối thiểu 4 ký tự" 
-                          value={cvFormData.password} onChange={(e) => setCvFormData({ ...cvFormData, password: e.target.value })}
-                          className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-yellow-400 transition-all font-black text-sm tracking-widest" />
                       </div>
                     </div>
 
@@ -4234,7 +4519,7 @@ export default function App() {
                           {foundCV.type === 'reenroll' ? (
                             <div className="grid grid-cols-2 gap-6">
                               <div className="col-span-2 pt-2 border-t border-yellow-100">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Khóa tham gia trước</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Tham gia</p>
                                 <p className="text-xs font-bold text-slate-700">{foundCV.previousCourse || '---'}</p>
                               </div>
                               <div className="pt-2 border-t border-yellow-100">
@@ -4862,6 +5147,39 @@ export default function App() {
                     
                     try {
                       if (editingCourseId) {
+                        const course = courses.find(c => c.id === editingCourseId);
+                        if (course) {
+                          const removedIds = course.studentIds.filter(id => !selectedLearningCvIds.includes(id));
+                          if (removedIds.length > 0) {
+                            await Promise.all(removedIds.map(id => 
+                              updateDoc(doc(db, 'cvs', id), {
+                                companion: '',
+                                studyGroup: '',
+                                studentId: ''
+                              })
+                            ));
+                            
+                            const updatedTracking = course.tracking ? { ...course.tracking } : {};
+                            removedIds.forEach(id => {
+                              delete updatedTracking[id];
+                            });
+
+                            await updateDoc(doc(db, 'courses', editingCourseId), {
+                              name: courseForm.name,
+                              startDate: courseForm.start,
+                              endDate: courseForm.end,
+                              closingDate: courseForm.closingDate,
+                              studentIds: selectedLearningCvIds,
+                              tracking: updatedTracking
+                            });
+                            setChromeAlert("Đã cập nhật khóa học!");
+                            setShowCreateCourseModal(false);
+                            setSelectedLearningCvIds([]);
+                            setEditingCourseId(null);
+                            return;
+                          }
+                        }
+                        
                         await updateDoc(doc(db, 'courses', editingCourseId), {
                           name: courseForm.name,
                           startDate: courseForm.start,
