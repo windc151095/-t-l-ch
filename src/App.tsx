@@ -70,7 +70,8 @@ import {
   ArrowLeft,
   Sparkles,
   RefreshCw,
-  BookOpen
+  BookOpen,
+  ArrowDownToLine
 } from 'lucide-react';
 import { 
   collection, 
@@ -2528,13 +2529,22 @@ export default function App() {
                             setSelectedDeleteCvIds([]);
                           }}
                           className={cn(
-                            "p-3 flex items-center justify-center rounded-xl transition-all border border-transparent bg-slate-50 shadow-sm",
+                            "relative p-3 flex items-center justify-center rounded-xl transition-all border border-transparent bg-slate-50 shadow-sm",
                             adminCvTab === 'learning'
                               ? "bg-purple-50/50 border text-purple-600 border-purple-200"
                               : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                           )}
                         >
                           <GraduationCap size={18} strokeWidth={2.5} />
+                          {(() => {
+                            const newReenrollCount = cvs.filter(c => c.type === 'reenroll' && !courses.some(course => course.studentIds.includes(c.id))).length;
+                            if (newReenrollCount === 0) return null;
+                            return (
+                              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-sm border-2 border-white z-10">
+                                {newReenrollCount > 99 ? '99+' : newReenrollCount}
+                              </span>
+                            );
+                          })()}
                         </button>
                         
                         <div className="relative">
@@ -2542,13 +2552,22 @@ export default function App() {
                             title="Kiểm duyệt"
                             onClick={() => setIsApprovalMenuOpen(!isApprovalMenuOpen)}
                             className={cn(
-                              "p-3 flex items-center justify-center rounded-xl transition-all border border-transparent bg-slate-50 shadow-sm",
+                              "relative p-3 flex items-center justify-center rounded-xl transition-all border border-transparent bg-slate-50 shadow-sm",
                               ['accountant', 'app_approver', 'delete'].includes(adminCvTab)
                                 ? "bg-blue-50/50 border text-blue-600 border-blue-200"
                                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                             )}
                           >
                             <MousePointerClick size={18} strokeWidth={2.5} />
+                            {(() => {
+                              const pendingCount = cvs.filter(c => cvFilterMapping.pending(c) && c.type !== 'reenroll').length;
+                              if (pendingCount === 0) return null;
+                              return (
+                                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-sm border-2 border-white z-10">
+                                  {pendingCount > 99 ? '99+' : pendingCount}
+                                </span>
+                              );
+                            })()}
                           </button>
                           
                           <AnimatePresence>
@@ -2793,7 +2812,7 @@ export default function App() {
 
                           <div className="grid grid-cols-1 gap-4">
                             {(() => {
-                              const renderCVList = (cvList: CV[]) => cvList.map((cv) => (
+                              const renderCVList = (cvList: CV[], isWaitlistWithActiveCourse?: boolean) => cvList.map((cv) => (
                                 <div key={cv.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-start justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden group">
                                   {/* Status strip */}
                                   <div className={cn(
@@ -2988,6 +3007,49 @@ export default function App() {
                                             <RotateCcw size={16} strokeWidth={3} />
                                            </button>
                                          )}
+
+                                          {isWaitlistWithActiveCourse && (
+                                            <button
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (!await customConfirm("Điều chuyển chuyển HV này về Danh sách chờ (HV sẽ bị xóa khỏi khóa học hiện tại)?")) return;
+                                                
+                                                const activeCourse = courses.find(course => course.studentIds.some(id => {
+                                                  const compCv = cvs.find(x => x.id === id);
+                                                  return compCv && (compCv.phone === cv.phone || compCv.phoneLast4 === cv.phoneLast4);
+                                                }));
+                                                
+                                                if (activeCourse) {
+                                                  const activeCvId = activeCourse.studentIds.find(id => {
+                                                     const compCv = cvs.find(x => x.id === id);
+                                                     return compCv && (compCv.phone === cv.phone || compCv.phoneLast4 === cv.phoneLast4);
+                                                  });
+
+                                                  if (activeCvId) {
+                                                    const updatedTracking = activeCourse.tracking ? { ...activeCourse.tracking } : {};
+                                                    delete updatedTracking[activeCvId];
+
+                                                    await updateDoc(doc(db, 'courses', activeCourse.id), {
+                                                      studentIds: activeCourse.studentIds.filter(id => id !== activeCvId),
+                                                      tracking: updatedTracking
+                                                    });
+                                                    
+                                                    await updateDoc(doc(db, 'cvs', activeCvId), {
+                                                      companion: deleteField(),
+                                                      studyGroup: deleteField(),
+                                                      studentId: deleteField()
+                                                    });
+                                                    setChromeAlert("Đã điều chuyển về danh sách chờ và xóa khỏi khóa học cũ!");
+                                                  }
+                                                }
+                                              }}
+                                              className="px-3 py-1.5 bg-yellow-50 text-amber-600 hover:bg-yellow-100 rounded-xl transition-all border border-yellow-200 shadow-sm font-bold text-[10px] uppercase tracking-widest flex items-center gap-1.5"
+                                              title="Điều chuyển về danh sách chờ (loại khỏi khóa)"
+                                            >
+                                              <ArrowDownToLine size={14} strokeWidth={2.5} />
+                                              ĐIỀU CHUYỂN NGAY
+                                            </button>
+                                          )}
                                        </div>
                                      </div>
                                    </div>
@@ -3013,10 +3075,29 @@ export default function App() {
                                             Ngày chốt: {format(new Date(course.closingDate), 'dd/MM/yyyy')}
                                           </p>
                                         </div>
-                                        <div className="flex items-center gap-2 pt-4 border-t border-slate-50">
+                                        <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-50">
                                           <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-black uppercase tracking-widest">
                                             {course.studentIds.length} Học viên
                                           </span>
+                                          {(() => {
+                                            const courseCvs = cvs.filter(c => course.studentIds.includes(c.id));
+                                            const newEnroll = courseCvs.filter(c => c.type !== 'reenroll').length;
+                                            const reEnroll = courseCvs.filter(c => c.type === 'reenroll').length;
+                                            return (
+                                              <>
+                                                {newEnroll > 0 && (
+                                                  <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold border border-emerald-100">
+                                                    {newEnroll} Mới
+                                                  </span>
+                                                )}
+                                                {reEnroll > 0 && (
+                                                  <span className="px-2 py-1 bg-yellow-50 text-amber-600 rounded-lg text-[10px] font-bold border border-amber-100">
+                                                    {reEnroll} Học lại
+                                                  </span>
+                                                )}
+                                              </>
+                                            );
+                                          })()}
                                         </div>
                                       </div>
                                     ))}
@@ -3027,16 +3108,48 @@ export default function App() {
                                     )}
                                   </div>
                                   
-                                  <div className="mt-12">
-                                    <div className="flex items-center gap-3 mb-6">
-                                      <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Danh sách Học lại chờ phân bổ</h3>
-                                      <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-black">
-                                        {cvs.filter(c => c.type === 'reenroll' && !courses.some(course => course.studentIds.includes(c.id))).length}
-                                      </span>
-                                    </div>
-                                    <div className="grid grid-cols-1 gap-4">
-                                      {renderCVList(cvs.filter(c => c.type === 'reenroll' && !courses.some(course => course.studentIds.includes(c.id))))}
-                                    </div>
+                                  <div className="mt-12 space-y-12">
+                                    {(() => {
+                                      const allReenrollWaitlistCvs = cvs.filter(c => c.type === 'reenroll' && !courses.some(course => course.studentIds.includes(c.id)));
+                                      
+                                      const cvsInCurrentCourses = cvs.filter(c => courses.some(course => course.studentIds.includes(c.id)));
+                                      
+                                      const waitlistInCourse = allReenrollWaitlistCvs.filter(wc => cvsInCurrentCourses.some(cc => (cc.phone === wc.phone || cc.phoneLast4 === wc.phoneLast4) && cc.id !== wc.id));
+                                      const waitlistNotInCourse = allReenrollWaitlistCvs.filter(wc => !cvsInCurrentCourses.some(cc => (cc.phone === wc.phone || cc.phoneLast4 === wc.phoneLast4) && cc.id !== wc.id));
+
+                                      return (
+                                        <>
+                                          <div>
+                                            <div className="flex items-center gap-3 mb-6">
+                                              <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Danh sách Học lại chờ phân bổ</h3>
+                                              <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-black">
+                                                {waitlistNotInCourse.length}
+                                              </span>
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-4">
+                                              {renderCVList(waitlistNotInCourse)}
+                                            </div>
+                                          </div>
+                                          
+                                          {waitlistInCourse.length > 0 && (
+                                            <div className="bg-yellow-50/50 p-6 rounded-[2rem] border border-yellow-100 shadow-inner">
+                                              <div className="flex items-center gap-3 mb-4">
+                                                <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                                                   Danh sách chờ phân bổ <span className="text-amber-600">(Đang có trong khóa)</span>
+                                                </h3>
+                                                <span className="px-3 py-1 bg-white text-slate-700 rounded-lg text-xs font-black shadow-sm">
+                                                  {waitlistInCourse.length}
+                                                </span>
+                                              </div>
+                                              <p className="text-xs font-bold text-slate-500 mb-6">Học viên đã nộp CV xin học lại nhưng vẫn đang được phân bổ trong một khóa học khác.</p>
+                                              <div className="grid grid-cols-1 gap-4">
+                                                {renderCVList(waitlistInCourse, true)}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                   </>
                                 );
@@ -3792,6 +3905,34 @@ export default function App() {
                                                   >
                                                     <Trash2 size={14} />
                                                   </button>
+                                                  
+                                                  <button
+                                                    onClick={async (e) => {
+                                                      e.stopPropagation();
+                                                      if (!await customConfirm("Điều chuyển chuyển HV này về Danh sách chờ học lại (xóa khỏi khóa học hiện tại)?")) return;
+                                                      
+                                                      const updatedTracking = course.tracking ? { ...course.tracking } : {};
+                                                      delete updatedTracking[cv.id];
+
+                                                      await updateDoc(doc(db, 'courses', course.id), {
+                                                        studentIds: course.studentIds.filter(id => id !== cv.id),
+                                                        tracking: updatedTracking
+                                                      });
+                                                      
+                                                      await updateDoc(doc(db, 'cvs', cv.id), {
+                                                        type: 'reenroll',
+                                                        previousCourse: course.name,
+                                                        companion: deleteField(),
+                                                        studyGroup: deleteField(),
+                                                        studentId: deleteField()
+                                                      });
+                                                      setChromeAlert("Đã chuyển về Danh sách chờ học lại!");
+                                                    }}
+                                                    className="absolute top-2 right-9 p-1.5 bg-yellow-50 text-amber-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-yellow-100 shadow-sm"
+                                                    title="Điều chuyển về danh sách chờ học lại (loại khỏi khóa)"
+                                                  >
+                                                    <ArrowDownToLine size={14} />
+                                                  </button>
                                                 </div>
                                               ))}
                                             </div>
@@ -3933,6 +4074,34 @@ export default function App() {
                                                               title="Xóa khỏi khóa học"
                                                             >
                                                               <Trash2 size={14} />
+                                                            </button>
+
+                                                            <button
+                                                              onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                if (!await customConfirm("Điều chuyển chuyển HV này về Danh sách chờ học lại (xóa khỏi khóa học hiện tại)?")) return;
+                                                                
+                                                                const updatedTracking = course.tracking ? { ...course.tracking } : {};
+                                                                delete updatedTracking[cv.id];
+
+                                                                await updateDoc(doc(db, 'courses', course.id), {
+                                                                  studentIds: course.studentIds.filter(id => id !== cv.id),
+                                                                  tracking: updatedTracking
+                                                                });
+                                                                
+                                                                await updateDoc(doc(db, 'cvs', cv.id), {
+                                                                  type: 'reenroll',
+                                                                  previousCourse: course.name,
+                                                                  companion: deleteField(),
+                                                                  studyGroup: deleteField(),
+                                                                  studentId: deleteField()
+                                                                });
+                                                                setChromeAlert("Đã chuyển về Danh sách chờ học lại!");
+                                                              }}
+                                                              className="absolute top-2 right-9 p-1.5 bg-yellow-50 text-amber-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-yellow-100 shadow-sm"
+                                                              title="Điều chuyển về danh sách chờ học lại (loại khỏi khóa)"
+                                                            >
+                                                              <ArrowDownToLine size={14} />
                                                             </button>
                                                           </div>
                                                         ))}
