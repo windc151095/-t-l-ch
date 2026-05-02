@@ -3076,15 +3076,15 @@ export default function App() {
                                           </p>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-50">
-                                          <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-black uppercase tracking-widest">
-                                            {course.studentIds.length} Học viên
-                                          </span>
                                           {(() => {
                                             const courseCvs = cvs.filter(c => course.studentIds.includes(c.id));
                                             const newEnroll = courseCvs.filter(c => c.type !== 'reenroll').length;
                                             const reEnroll = courseCvs.filter(c => c.type === 'reenroll').length;
                                             return (
                                               <>
+                                                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-black uppercase tracking-widest">
+                                                  {courseCvs.length} Học viên
+                                                </span>
                                                 {newEnroll > 0 && (
                                                   <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold border border-emerald-100">
                                                     {newEnroll} Mới
@@ -3210,13 +3210,22 @@ export default function App() {
                                       <div className="flex items-center gap-2">
                                         <button 
                                           onClick={async () => {
-                                            if (!await customConfirm("Tạo mã học viên định dạng HV-01 tự động xếp theo Người Đồng Hành?")) return;
+                                            if (!await customConfirm("Tạo mã học viên định dạng HV-01 tự động xếp theo Group Học Tập -> Người Đồng Hành -> Mentor?")) return;
                                             
-                                            // Sort by Companion -> Name
+                                            // Sort by Group -> Companion -> Guide (Mentor) -> Name
                                             const sorted = [...enrolledCvs].sort((a, b) => {
+                                              const sgA = a.studyGroup || 'ZZZ';
+                                              const sgB = b.studyGroup || 'ZZZ';
+                                              if (sgA !== sgB) return sgA.localeCompare(sgB);
+                                              
                                               const cA = a.companion || 'ZZZ';
                                               const cB = b.companion || 'ZZZ';
                                               if (cA !== cB) return cA.localeCompare(cB);
+                                              
+                                              const gA = a.guideName || 'ZZZ';
+                                              const gB = b.guideName || 'ZZZ';
+                                              if (gA !== gB) return gA.localeCompare(gB);
+
                                               return a.fullName.localeCompare(b.fullName);
                                             });
 
@@ -3242,12 +3251,18 @@ export default function App() {
                                             
                                             // Sort data same as view
                                             const sorted = [...enrolledCvs].sort((a,b) => {
-                                              const compA = a.companion || 'ZZZ';
-                                              const compB = b.companion || 'ZZZ';
-                                              if (compA !== compB) return compA.localeCompare(compB);
-                                              const grpA = a.studyGroup || 'ZZZ';
-                                              const grpB = b.studyGroup || 'ZZZ';
-                                              if (grpA !== grpB) return grpA.localeCompare(grpB);
+                                              const sgA = a.studyGroup || 'ZZZ';
+                                              const sgB = b.studyGroup || 'ZZZ';
+                                              if (sgA !== sgB) return sgA.localeCompare(sgB);
+                                              
+                                              const cA = a.companion || 'ZZZ';
+                                              const cB = b.companion || 'ZZZ';
+                                              if (cA !== cB) return cA.localeCompare(cB);
+                                              
+                                              const gA = a.guideName || 'ZZZ';
+                                              const gB = b.guideName || 'ZZZ';
+                                              if (gA !== gB) return gA.localeCompare(gB);
+
                                               return a.fullName.localeCompare(b.fullName);
                                             });
 
@@ -3623,12 +3638,18 @@ export default function App() {
                                               <tbody className="text-[10px]">
                                                 {(() => {
                                                   const sorted = [...enrolledCvs].sort((a,b) => {
-                                                    const compA = a.companion || 'ZZZ';
-                                                    const compB = b.companion || 'ZZZ';
-                                                    if (compA !== compB) return compA.localeCompare(compB);
-                                                    const grpA = a.studyGroup || 'ZZZ';
-                                                    const grpB = b.studyGroup || 'ZZZ';
-                                                    if (grpA !== grpB) return grpA.localeCompare(grpB);
+                                                    const sgA = a.studyGroup || 'ZZZ';
+                                                    const sgB = b.studyGroup || 'ZZZ';
+                                                    if (sgA !== sgB) return sgA.localeCompare(sgB);
+                                                    
+                                                    const cA = a.companion || 'ZZZ';
+                                                    const cB = b.companion || 'ZZZ';
+                                                    if (cA !== cB) return cA.localeCompare(cB);
+                                                    
+                                                    const gA = a.guideName || 'ZZZ';
+                                                    const gB = b.guideName || 'ZZZ';
+                                                    if (gA !== gB) return gA.localeCompare(gB);
+
                                                     return a.fullName.localeCompare(b.fullName);
                                                   });
                                                   return sorted.map((cv, index) => {
