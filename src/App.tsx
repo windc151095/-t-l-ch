@@ -245,6 +245,15 @@ export default function App() {
   const [isSubmittingCV, setIsSubmittingCV] = useState(false);
   const [showCVSaveSuccess, setShowCVSaveSuccess] = useState(false);
   const [chromeAlert, setChromeAlert] = useState<string | null>(null);
+  const [trackingFilters, setTrackingFilters] = useState({
+    companion: '',
+    studentId: '',
+    fullName: '',
+    age: '',
+    guideName: '',
+    studyGroup: '',
+    facebook: ''
+  });
   const [cvFormData, setCvFormData] = useState({
     fullName: '',
     phone: '',
@@ -2812,7 +2821,7 @@ export default function App() {
 
                           <div className="grid grid-cols-1 gap-4">
                             {(() => {
-                              const renderCVList = (cvList: CV[], isWaitlistWithActiveCourse?: boolean) => cvList.map((cv) => (
+                              const renderCVList = (cvList: CV[], isWaitlistWithActiveCourse?: boolean, isWaitlist?: boolean) => cvList.map((cv) => (
                                 <div key={cv.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-start justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden group">
                                   {/* Status strip */}
                                   <div className={cn(
@@ -2938,6 +2947,20 @@ export default function App() {
                                              title="Sửa thông tin"
                                            >
                                              <Edit3 size={16} strokeWidth={3} />
+                                           </button>
+                                         )}
+
+                                         {isWaitlist && (
+                                           <button 
+                                             onClick={async () => {
+                                               if (await customConfirm("Bạn có chắc chắn muốn xóa học viên này khỏi danh sách Học lại chờ phân bổ?")) {
+                                                 await deleteDoc(doc(db, 'cvs', cv.id));
+                                               }
+                                             }}
+                                             className="p-2 bg-red-50 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"
+                                             title="Xóa khỏi danh sách"
+                                           >
+                                             <Trash2 size={16} strokeWidth={3} />
                                            </button>
                                          )}
 
@@ -3127,7 +3150,7 @@ export default function App() {
                                               </span>
                                             </div>
                                             <div className="grid grid-cols-1 gap-4">
-                                              {renderCVList(waitlistNotInCourse)}
+                                              {renderCVList(waitlistNotInCourse, false, true)}
                                             </div>
                                           </div>
                                           
@@ -3143,7 +3166,7 @@ export default function App() {
                                               </div>
                                               <p className="text-xs font-bold text-slate-500 mb-6">Học viên đã nộp CV xin học lại nhưng vẫn đang được phân bổ trong một khóa học khác.</p>
                                               <div className="grid grid-cols-1 gap-4">
-                                                {renderCVList(waitlistInCourse, true)}
+                                                {renderCVList(waitlistInCourse, true, true)}
                                               </div>
                                             </div>
                                           )}
@@ -3605,13 +3628,33 @@ export default function App() {
                                                   <th colSpan={22} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
                                                 </tr>
                                                 <tr>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">STT</th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">NGƯỜI ĐỒNG HÀNH</th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">MÃ HỌC VIÊN</th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle">HỌ TÊN</th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle">TUỔI</th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">HDV</th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">GROUP HỌC TẬP</th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">
+                                                    STT
+                                                  </th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">
+                                                    NGƯỜI ĐỒNG HÀNH
+                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.companion} onChange={e => setTrackingFilters(f => ({...f, companion: e.target.value}))} />
+                                                  </th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">
+                                                    MÃ HỌC VIÊN
+                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.studentId} onChange={e => setTrackingFilters(f => ({...f, studentId: e.target.value}))} />
+                                                  </th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle">
+                                                    HỌ TÊN
+                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.fullName} onChange={e => setTrackingFilters(f => ({...f, fullName: e.target.value}))} />
+                                                  </th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle">
+                                                    TUỔI
+                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-10 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.age} onChange={e => setTrackingFilters(f => ({...f, age: e.target.value}))} />
+                                                  </th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">
+                                                    HDV
+                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.guideName} onChange={e => setTrackingFilters(f => ({...f, guideName: e.target.value}))} />
+                                                  </th>
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">
+                                                    GROUP HỌC TẬP
+                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.studyGroup} onChange={e => setTrackingFilters(f => ({...f, studyGroup: e.target.value}))} />
+                                                  </th>
                                                   <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">FACEBOOK</th>
                                                   {[
                                                     { id: 'buoiDinhHinh', label: 'BUỔI ĐỊNH HÌNH' },
@@ -3638,7 +3681,15 @@ export default function App() {
                                               </thead>
                                               <tbody className="text-[10px]">
                                                 {(() => {
-                                                  const sorted = [...enrolledCvs].sort((a,b) => {
+                                                  const sorted = [...enrolledCvs].filter(cv => {
+                                                    if (trackingFilters.companion && !(cv.companion || '').toLowerCase().includes(trackingFilters.companion.toLowerCase())) return false;
+                                                    if (trackingFilters.studentId && !(cv.studentId || '').toLowerCase().includes(trackingFilters.studentId.toLowerCase())) return false;
+                                                    if (trackingFilters.fullName && !(cv.fullName || '').toLowerCase().includes(trackingFilters.fullName.toLowerCase())) return false;
+                                                    if (trackingFilters.age && !(cv.age || '').toLowerCase().includes(trackingFilters.age.toLowerCase())) return false;
+                                                    if (trackingFilters.guideName && !(cv.guideName || '').toLowerCase().includes(trackingFilters.guideName.toLowerCase())) return false;
+                                                    if (trackingFilters.studyGroup && !(cv.studyGroup || '').toLowerCase().includes(trackingFilters.studyGroup.toLowerCase())) return false;
+                                                    return true;
+                                                  }).sort((a,b) => {
                                                     const sgA = a.studyGroup || 'ZZZ';
                                                     const sgB = b.studyGroup || 'ZZZ';
                                                     if (sgA !== sgB) return sgA.localeCompare(sgB);
@@ -4882,6 +4933,27 @@ export default function App() {
                             </div>
                           </div>
                           
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            {foundCV.studentId && (
+                              <div className="bg-purple-100 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 flex flex-col justify-center">
+                                <span className="text-[9px] font-bold uppercase tracking-widest leading-none mb-0.5">Mã HV</span>
+                                <span className="font-black text-xs leading-none">{foundCV.studentId}</span>
+                              </div>
+                            )}
+                            {foundCV.studyGroup && (
+                              <div className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 flex flex-col justify-center">
+                                <span className="text-[9px] font-bold uppercase tracking-widest leading-none mb-0.5">Group Học Tập</span>
+                                <span className="font-black text-xs leading-none uppercase">{foundCV.studyGroup}</span>
+                              </div>
+                            )}
+                            {(foundCV.companion || foundCV.guideName) && (
+                              <div className="bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200 flex flex-col justify-center">
+                                <span className="text-[9px] font-bold uppercase tracking-widest leading-none mb-0.5">Đồng hành & HDV</span>
+                                <span className="font-black text-xs leading-none">{foundCV.companion || 'Chưa rõ'} • {foundCV.guideName || 'Chưa rõ'}</span>
+                              </div>
+                            )}
+                          </div>
+
                           {foundCV.status === 'pending' && (
                             <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl text-[10px] text-orange-600 font-bold flex items-center gap-2">
                               <Clock size={12} />
@@ -4924,20 +4996,6 @@ export default function App() {
                                         : "Đã qua bước Kế toán phê duyệt. Đang chờ Duyệt App."}
                                   </span>
                                 </div>
-                                {foundCV.type === 'reenroll' && foundCV.appApproved === true && (
-                                  <div className="flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-4 shrink-0 text-right">
-                                    {foundCV.companion && (
-                                      <p className="bg-white/60 px-3 py-1.5 rounded-lg border border-blue-100/50">
-                                        Đồng hành: <span className="font-black ml-1">{foundCV.companion}</span>
-                                      </p>
-                                    )}
-                                    {foundCV.studyGroup && (
-                                      <p className="bg-white/60 px-3 py-1.5 rounded-lg border border-blue-100/50">
-                                        Group: <span className="font-black ml-1 text-purple-600 uppercase tracking-widest">{foundCV.studyGroup}</span>
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
                               </div>
                               {foundCV.appRejectedReason && (
                                 <p className="mt-2 text-xs font-medium italic p-3 bg-red-100/50 rounded-lg">
