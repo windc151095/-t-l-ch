@@ -3083,47 +3083,59 @@ export default function App() {
                               if (adminCvTab === 'learning' && !selectedCourseId) {
                                 return (
                                   <>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {courses.map(course => (
-                                      <div key={course.id} className="bg-white p-6 rounded-[2rem] border border-purple-100 shadow-sm hover:shadow-xl transition-all relative group cursor-pointer" onClick={() => setSelectedCourseId(course.id)}>
-                                        <div className="w-12 h-12 bg-purple-50 flex items-center justify-center rounded-2xl mb-4 text-purple-600">
-                                          <GraduationCap size={24} />
-                                        </div>
-                                        <h4 className="font-black text-slate-800 text-lg mb-2">{course.name}</h4>
-                                        <div className="space-y-1 mb-4">
-                                          <p className="text-xs font-bold text-slate-500">
-                                            Thời gian: {format(new Date(course.startDate), 'dd/MM/yyyy')} - {format(new Date(course.endDate), 'dd/MM/yyyy')}
-                                          </p>
-                                          <p className="text-xs font-bold text-red-500">
-                                            Ngày chốt: {format(new Date(course.closingDate), 'dd/MM/yyyy')}
-                                          </p>
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-50">
-                                          {(() => {
-                                            const courseCvs = cvs.filter(c => course.studentIds.includes(c.id));
-                                            const newEnroll = courseCvs.filter(c => c.type !== 'reenroll').length;
-                                            const reEnroll = courseCvs.filter(c => c.type === 'reenroll').length;
-                                            return (
-                                              <>
-                                                <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-black uppercase tracking-widest">
-                                                  {courseCvs.length} Học viên
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {courses.map(course => {
+                                      const courseCvs = cvs.filter(c => course.studentIds.includes(c.id));
+                                      const newEnroll = courseCvs.filter(c => c.type !== 'reenroll').length;
+                                      const reEnroll = courseCvs.filter(c => c.type === 'reenroll').length;
+                                      
+                                      return (
+                                      <div key={course.id} className="bg-white p-6 rounded-[2.5rem] border border-purple-100 shadow-sm hover:shadow-xl transition-all relative group cursor-pointer overflow-hidden" onClick={() => setSelectedCourseId(course.id)}>
+                                        <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-bl-full -mr-8 -mt-8 opacity-0 group-hover:opacity-100 transition-all pointer-events-none" />
+                                        
+                                        <div className="flex items-start justify-between mb-4">
+                                          <div className="w-12 h-12 bg-purple-50 flex items-center justify-center rounded-2xl text-purple-600 shadow-inner group-hover:bg-purple-600 group-hover:text-white transition-colors duration-300">
+                                            <GraduationCap size={24} />
+                                          </div>
+                                          <div className="flex flex-col items-end gap-1.5">
+                                            {newEnroll > 0 && (
+                                              <div className="relative flex items-center">
+                                                <span className="px-2 py-0.5 bg-emerald-500 text-white text-[8px] font-black rounded-full uppercase tracking-tighter shadow-sm">
+                                                  +{newEnroll} Mới
                                                 </span>
-                                                {newEnroll > 0 && (
-                                                  <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold border border-emerald-100">
-                                                    {newEnroll} Mới
-                                                  </span>
-                                                )}
-                                                {reEnroll > 0 && (
-                                                  <span className="px-2 py-1 bg-yellow-50 text-amber-600 rounded-lg text-[10px] font-bold border border-amber-100">
-                                                    {reEnroll} Học lại
-                                                  </span>
-                                                )}
-                                              </>
-                                            );
-                                          })()}
+                                                <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        
+                                        <h4 className="font-black text-slate-800 text-lg mb-2 group-hover:text-purple-700 transition-colors">{course.name}</h4>
+                                        <div className="space-y-1 mb-4">
+                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                                            <CalendarIcon size={12} className="text-purple-400" />
+                                            {format(new Date(course.startDate), 'dd/MM/yyyy')} - {format(new Date(course.endDate), 'dd/MM/yyyy')}
+                                          </p>
+                                          <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest flex items-center gap-1.5">
+                                            <Clock size={12} className="text-red-300" />
+                                            Chốt: {format(new Date(course.closingDate), 'dd/MM/yyyy')}
+                                          </p>
+                                        </div>
+                                        
+                                        <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-50">
+                                          <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-black uppercase tracking-widest">
+                                            {courseCvs.length} Học viên
+                                          </span>
+                                          {reEnroll > 0 && (
+                                            <span className="px-2 py-1 bg-yellow-50 text-amber-600 rounded-lg text-[10px] font-bold border border-amber-100">
+                                              {reEnroll} Học lại
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
-                                    ))}
+                                    )})}
                                     {courses.length === 0 && (
                                       <div className="col-span-full py-12 text-center text-slate-500 font-medium">
                                         Chưa có khóa học nào.
@@ -3144,9 +3156,15 @@ export default function App() {
                                         <>
                                           <div>
                                             <div className="flex items-center gap-3 mb-6">
-                                              <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight">Danh sách Học lại chờ phân bổ</h3>
-                                              <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-black">
-                                                {waitlistNotInCourse.length}
+                                              <h3 className="text-xl font-bold text-slate-800 uppercase tracking-tight flex items-center gap-3">
+                                                Danh sách Học lại chờ phân bổ
+                                                <span className="relative flex h-3 w-3">
+                                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 shadow-sm border border-white"></span>
+                                                </span>
+                                              </h3>
+                                              <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs font-black shadow-sm">
+                                                {waitlistNotInCourse.length} CV MỚI
                                               </span>
                                             </div>
                                             <div className="grid grid-cols-1 gap-4">
@@ -3183,19 +3201,21 @@ export default function App() {
                                 if (!course) return null;
                                 const enrolledCvs = cvs.filter(c => course.studentIds.includes(c.id));
                                 return (
-                                  <div className="space-y-4">
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 gap-4">
-                                      <div className="flex items-center gap-4">
+                                  <div className="space-y-6">
+                                    <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+                                      <div className="flex items-center gap-6">
                                         <button 
                                           onClick={() => setSelectedCourseId(null)}
-                                          className="p-2 bg-slate-50 text-slate-500 hover:text-slate-800 rounded-xl transition-colors"
+                                          className="p-3 bg-slate-50 text-slate-500 hover:text-slate-800 rounded-2xl transition-all hover:scale-110 active:scale-95 border border-slate-100"
                                         >
-                                          <ArrowLeft size={20} />
+                                          <ArrowLeft size={24} />
                                         </button>
                                         <div>
-                                          <h3 className="font-black text-slate-800 text-lg flex items-center gap-3">
-                                            {course.name}
-                                            <div className="flex gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
+                                          <div className="flex items-center gap-3 mb-1">
+                                            <h3 className="font-black text-slate-900 text-2xl tracking-tighter uppercase">
+                                              {course.name}
+                                            </h3>
+                                            <div className="flex gap-1.5 p-1 bg-slate-50 rounded-lg border border-slate-100">
                                               <button 
                                                 onClick={(e) => {
                                                   e.stopPropagation();
@@ -3209,7 +3229,8 @@ export default function App() {
                                                   setSelectedLearningCvIds(course.studentIds);
                                                   setShowCreateCourseModal(true);
                                                 }}
-                                                className="p-1.5 bg-yellow-50 text-yellow-600 rounded-lg hover:bg-yellow-100 transition-colors"
+                                                className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                                                title="Sửa khóa học"
                                               >
                                                 <Edit3 size={16} />
                                               </button>
@@ -3221,16 +3242,31 @@ export default function App() {
                                                     setSelectedCourseId(null);
                                                   }
                                                 }}
-                                                className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                                                className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                                                title="Xóa khóa học"
                                               >
                                                 <Trash2 size={16} />
                                               </button>
                                             </div>
-                                          </h3>
-                                          <p className="text-xs font-bold text-slate-500">{enrolledCvs.length} Học viên</p>
+                                          </div>
+                                          <div className="flex items-center gap-4">
+                                            <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-purple-100">
+                                              Tổng: {enrolledCvs.length} Học viên
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1">
+                                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                                                {enrolledCvs.filter(c => c.type !== 'reenroll').length} Mới
+                                              </span>
+                                              <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest flex items-center gap-1">
+                                                <div className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                                                {enrolledCvs.filter(c => c.type === 'reenroll').length} Học lại
+                                              </span>
+                                            </div>
+                                          </div>
                                         </div>
                                       </div>
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-3">
                                         <button 
                                           onClick={async () => {
                                             if (!await customConfirm("Tạo mã học viên định dạng HV-01 tự động xếp theo Group Học Tập -> Người Đồng Hành -> Mentor?")) return;
@@ -3263,10 +3299,10 @@ export default function App() {
                                               console.error(e);
                                             }
                                           }}
-                                          className="flex items-center gap-2 px-4 py-2.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-xl hover:bg-purple-100 transition-all text-xs font-black uppercase tracking-widest"
+                                          className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 transition-all text-xs font-black uppercase tracking-widest shadow-lg shadow-purple-200 active:scale-95"
                                         >
-                                          <Sparkles size={16} />
-                                          Tạo Mã HV
+                                          <Sparkles size={18} />
+                                          Đánh Mã HV
                                         </button>
                                         <button 
                                           onClick={async () => {
@@ -3316,7 +3352,7 @@ export default function App() {
                                                 cv.age || "",
                                                 cv.guideName || "",
                                                 cv.studyGroup || "",
-                                                cv.facebookLink ? "Link" : "",
+                                                cv.facebookLink ? (cv.facebookLink.includes('http') ? cv.facebookLink : `https://${cv.facebookLink}`) : "",
                                               ];
                                               
                                               ['buoiDinhHinh', 'buoi1', 'buoi2', 'buoi3', 'buoi4', 'buoi5', 'buoi6'].forEach(b => {
@@ -3421,28 +3457,29 @@ export default function App() {
                                             XLSX.utils.book_append_sheet(wb, ws, "Khóa Học");
                                             XLSX.writeFile(wb, `KhoaHoc_${course.name}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
                                           }}
-                                          className="flex items-center gap-2 px-4 py-2.5 bg-green-50 text-green-700 border border-green-200 rounded-xl hover:bg-green-100 transition-all text-xs font-black uppercase tracking-widest"
+                                          className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-200 active:scale-95"
                                         >
-                                          <Download size={16} />
+                                          <Download size={18} />
                                           Xuất Excel
                                         </button>
                                       </div>
                                     </div>
-                                    <div className="flex flex-col lg:flex-row gap-6">
+                                    
+                                    <div className="flex flex-col lg:flex-row gap-8 items-start">
                                       {/* Left Tabs pane */}
-                                      <div className="w-full lg:w-56 shrink-0 flex flex-col gap-2">
+                                      <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2 sticky top-[4.5rem]">
                                         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mb-1">
                                           Công tác phân bổ
                                         </div>
                                         <button 
                                           onClick={() => { setCourseDetailTab('companion'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
-                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'companion' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                          className={cn("px-4 py-3.5 rounded-2xl text-left font-black text-xs uppercase tracking-tight transition-all border", courseDetailTab === 'companion' ? "bg-purple-600 text-white shadow-xl shadow-purple-200 border-purple-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
                                         >
                                           Phân bổ Người đồng hành
                                         </button>
                                         <button 
                                           onClick={() => { setCourseDetailTab('group'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
-                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'group' ? "bg-purple-600 text-white shadow-lg shadow-purple-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                          className={cn("px-4 py-3.5 rounded-2xl text-left font-black text-xs uppercase tracking-tight transition-all border", courseDetailTab === 'group' ? "bg-purple-600 text-white shadow-xl shadow-purple-200 border-purple-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
                                         >
                                           Phân bổ Group học tập
                                         </button>
@@ -3452,20 +3489,20 @@ export default function App() {
                                         </div>
                                         <button 
                                           onClick={() => { setCourseDetailTab('tracking'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
-                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'tracking' ? "bg-yellow-400 text-amber-950 shadow-lg shadow-yellow-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                          className={cn("px-4 py-3.5 rounded-2xl text-left font-black text-xs uppercase tracking-tight transition-all border", courseDetailTab === 'tracking' ? "bg-yellow-400 text-amber-950 shadow-xl shadow-yellow-200 border-yellow-400" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
                                         >
-                                          Bảng theo dõi học tập ({course.tracking ? Object.keys(course.tracking).length : 0} HC)
+                                          Bảng theo dõi học tập ({course.tracking ? Object.keys(course.tracking).length : 0})
                                         </button>
                                         <button 
                                           onClick={() => { setCourseDetailTab('analytics'); setSelectedStudentIdsForAssign([]); setBulkAssignInput(''); setAssignFilter('all'); }}
-                                          className={cn("px-4 py-3 rounded-xl text-left font-bold text-sm transition-all", courseDetailTab === 'analytics' ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50")}
+                                          className={cn("px-4 py-3.5 rounded-2xl text-left font-black text-xs uppercase tracking-tight transition-all border", courseDetailTab === 'analytics' ? "bg-blue-600 text-white shadow-xl shadow-blue-200 border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")}
                                         >
                                           Phân tích chỉ số học tập
                                         </button>
                                       </div>
 
                                       {/* Right Content pane */}
-                                      <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-6 w-[0]">
+                                      <div className="flex-1 bg-white border border-slate-200 rounded-[2.5rem] p-8 flex flex-col gap-8 min-w-0 shadow-sm w-full">
                                         
                                         {courseDetailTab === 'analytics' ? (() => {
                                           const sortedForAnalytics = enrolledCvs.map(cv => {
@@ -3916,7 +3953,7 @@ export default function App() {
                                               </div>
                                             </div>
 
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-2">
+                                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
                                               {enrolledCvs
                                                 .filter(cv => {
                                                   if (assignFilter === 'all') return true;
@@ -4097,7 +4134,7 @@ export default function App() {
                                                           <span className="text-slate-400 text-xs tracking-widest">({cvs.length})</span>
                                                         </h4>
                                                       </div>
-                                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-8">
+                                                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 pl-8">
                                                         {cvs.sort((a,b) => a.fullName.localeCompare(b.fullName)).map(cv => (
                                                           <div key={cv.id} onClick={() => {
                                                             setSelectedStudentIdsForAssign(prev => prev.includes(cv.id) ? prev.filter(i => i !== cv.id) : [...prev, cv.id]);
@@ -4935,21 +4972,27 @@ export default function App() {
                           
                           <div className="flex flex-wrap gap-2 pt-2">
                             {foundCV.studentId && (
-                              <div className="bg-purple-100 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 flex flex-col justify-center">
-                                <span className="text-[9px] font-bold uppercase tracking-widest leading-none mb-0.5">Mã HV</span>
-                                <span className="font-black text-xs leading-none">{foundCV.studentId}</span>
+                              <div className="bg-purple-100 text-purple-700 px-3 py-1.5 rounded-xl border border-purple-200 flex flex-col justify-center shadow-sm">
+                                <span className="text-[9px] font-black uppercase tracking-widest leading-none mb-0.5 opacity-70">Mã HV</span>
+                                <span className="font-black text-sm leading-none">{foundCV.studentId}</span>
                               </div>
                             )}
                             {foundCV.studyGroup && (
-                              <div className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 flex flex-col justify-center">
-                                <span className="text-[9px] font-bold uppercase tracking-widest leading-none mb-0.5">Group Học Tập</span>
-                                <span className="font-black text-xs leading-none uppercase">{foundCV.studyGroup}</span>
+                              <div className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-xl border border-blue-200 flex flex-col justify-center shadow-sm">
+                                <span className="text-[9px] font-black uppercase tracking-widest leading-none mb-0.5 opacity-70">Group Học Tập</span>
+                                <span className="font-black text-sm leading-none uppercase">{foundCV.studyGroup}</span>
                               </div>
                             )}
-                            {(foundCV.companion || foundCV.guideName) && (
-                              <div className="bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200 flex flex-col justify-center">
-                                <span className="text-[9px] font-bold uppercase tracking-widest leading-none mb-0.5">Đồng hành & HDV</span>
-                                <span className="font-black text-xs leading-none">{foundCV.companion || 'Chưa rõ'} • {foundCV.guideName || 'Chưa rõ'}</span>
+                            {foundCV.companion && (
+                              <div className="bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-xl border border-emerald-200 flex flex-col justify-center shadow-sm">
+                                <span className="text-[9px] font-black uppercase tracking-widest leading-none mb-0.5 opacity-70">Người Đồng Hành</span>
+                                <span className="font-black text-sm leading-none">{foundCV.companion}</span>
+                              </div>
+                            )}
+                            {foundCV.guideName && (
+                              <div className="bg-amber-100 text-amber-700 px-3 py-1.5 rounded-xl border border-amber-200 flex flex-col justify-center shadow-sm">
+                                <span className="text-[9px] font-black uppercase tracking-widest leading-none mb-0.5 opacity-70">Mentor (HDV)</span>
+                                <span className="font-black text-sm leading-none">{foundCV.guideName}</span>
                               </div>
                             )}
                           </div>
