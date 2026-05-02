@@ -3394,6 +3394,7 @@ export default function App() {
                                             ];
 
                                             const wb = XLSX.utils.book_new();
+                                            ws['!autofilter'] = { ref: `A2:V${aoa.length}` };
                                             XLSX.utils.book_append_sheet(wb, ws, "Khóa Học");
                                             XLSX.writeFile(wb, `KhoaHoc_${course.name}_${format(new Date(), 'yyyyMMdd_HHmmss')}.xlsx`);
                                           }}
