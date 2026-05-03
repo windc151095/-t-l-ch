@@ -3894,21 +3894,28 @@ export default function App() {
                                           </div>
                                         </div>
 
-                                        {courseDetailTab === 'companion' ? (
-                                          <div className="space-y-4">
-                                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                              <div className="flex items-center gap-3">
-                                                <input 
-                                                  type="checkbox"
-                                                  className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
-                                                  checked={selectedStudentIdsForAssign.length === enrolledCvs.length && enrolledCvs.length > 0}
-                                                  onChange={(e) => {
-                                                    if (e.target.checked) setSelectedStudentIdsForAssign(enrolledCvs.map(c => c.id));
-                                                    else setSelectedStudentIdsForAssign([]);
-                                                  }}
-                                                />
-                                                <span className="text-sm font-bold text-slate-700">Chọn tất cả ({selectedStudentIdsForAssign.length}/{enrolledCvs.length})</span>
-                                              </div>
+                                        {courseDetailTab === 'companion' ? (() => {
+                                          const filteredCvs = enrolledCvs.filter(cv => {
+                                            if (assignFilter === 'all') return true;
+                                            if (assignFilter === 'unassigned') return !cv.companion;
+                                            return cv.companion === assignFilter;
+                                          });
+
+                                          return (
+                                            <div className="space-y-4">
+                                              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                <div className="flex items-center gap-3">
+                                                  <input 
+                                                    type="checkbox"
+                                                    className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                                    checked={selectedStudentIdsForAssign.length === filteredCvs.length && filteredCvs.length > 0}
+                                                    onChange={(e) => {
+                                                      if (e.target.checked) setSelectedStudentIdsForAssign(filteredCvs.map(c => c.id));
+                                                      else setSelectedStudentIdsForAssign([]);
+                                                    }}
+                                                  />
+                                                  <span className="text-sm font-bold text-slate-700">Chọn tất cả ({selectedStudentIdsForAssign.length}/{filteredCvs.length})</span>
+                                                </div>
                                               <div className="flex flex-col md:flex-row gap-2 w-full lg:w-auto">
                                                 <select 
                                                   value={assignFilter}
@@ -3954,12 +3961,7 @@ export default function App() {
                                             </div>
 
                                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-2">
-                                              {enrolledCvs
-                                                .filter(cv => {
-                                                  if (assignFilter === 'all') return true;
-                                                  if (assignFilter === 'unassigned') return !cv.companion;
-                                                  return cv.companion === assignFilter;
-                                                })
+                                              {filteredCvs
                                                 .sort((a,b) => {
                                                 const compA = a.companion || 'ZZZ';
                                                 const compB = b.companion || 'ZZZ';
@@ -4047,12 +4049,29 @@ export default function App() {
                                               ))}
                                             </div>
                                           </div>
-                                        ) : (
-                                          <div className="space-y-4">
-                                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                              <div className="flex items-center gap-3">
-                                                 <span className="text-sm font-bold text-slate-700">Đã chọn ({selectedStudentIdsForAssign.length})</span>
-                                              </div>
+                                        )})() : (
+                                          (() => {
+                                            const filteredCvs = enrolledCvs.filter(cv => {
+                                              if (assignFilter === 'all') return true;
+                                              if (assignFilter === 'unassigned') return !cv.studyGroup;
+                                              return cv.studyGroup === assignFilter;
+                                            });
+
+                                            return (
+                                              <div className="space-y-4">
+                                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                  <div className="flex items-center gap-3">
+                                                    <input 
+                                                      type="checkbox"
+                                                      className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                                      checked={selectedStudentIdsForAssign.length === filteredCvs.length && filteredCvs.length > 0}
+                                                      onChange={(e) => {
+                                                        if (e.target.checked) setSelectedStudentIdsForAssign(filteredCvs.map(c => c.id));
+                                                        else setSelectedStudentIdsForAssign([]);
+                                                      }}
+                                                    />
+                                                    <span className="text-sm font-bold text-slate-700">Chọn tất cả ({selectedStudentIdsForAssign.length}/{filteredCvs.length})</span>
+                                                  </div>
                                               <div className="flex flex-col md:flex-row gap-2 w-full lg:w-auto">
                                                 <select 
                                                   value={assignFilter}
@@ -4100,13 +4119,6 @@ export default function App() {
                                             {/* Group by study group */}
                                             <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
                                               {(() => {
-                                                let filteredCvs = enrolledCvs;
-                                                if (assignFilter === 'unassigned') {
-                                                  filteredCvs = enrolledCvs.filter(cv => !cv.studyGroup);
-                                                } else if (assignFilter !== 'all') {
-                                                  filteredCvs = enrolledCvs.filter(cv => cv.studyGroup === assignFilter);
-                                                }
-
                                                 const byGroup = filteredCvs.reduce((acc, cv) => {
                                                   const grp = cv.studyGroup || 'Chưa nhóm';
                                                   if (!acc[grp]) acc[grp] = [];
@@ -4222,9 +4234,10 @@ export default function App() {
                                               })()}
                                             </div>
                                           </div>
-                                        )}
-                                        </>
-                                        )}
+                                        );
+                                      })() ) }
+                                      </>
+                                      )}
                                       </div>
                                     </div>
                                   </div>
