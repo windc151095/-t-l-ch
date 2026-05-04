@@ -308,11 +308,21 @@ export default function App() {
   });
   const [activeColumnMenu, setActiveColumnMenu] = useState<string | null>(null);
   const [isHeaderFixed, setIsHeaderFixed] = useState(true);
+  const [activeTotalMenu, setActiveTotalMenu] = useState<{ lessonId: string, type: 'hoc' | 'hanh' } | null>(null);
 
   const [bulkAssignInput, setBulkAssignInput] = useState('');
   const [newEntityName, setNewEntityName] = useState('');
   const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setActiveColumnMenu(null);
+      setActiveTotalMenu(null);
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   const columnsDef = [
     { id: 'stt', width: 40, label: 'STT' },
@@ -4350,8 +4360,62 @@ export default function App() {
                                                               const hanhCount = nonNgungCvs.filter(cv => course.tracking?.[cv.id]?.[b.id]?.hanh && course.tracking?.[cv.id]?.[b.id]?.hanh !== '🖤').length;
                                                               return (
                                                                   <React.Fragment key={`total-${b.id}`}>
-                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-green-700">{hocCount}</td>
-                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-blue-700">{hanhCount}</td>
+                                                                      <td 
+                                                                          className="relative px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-green-700 cursor-pointer hover:bg-slate-200"
+                                                                          onClick={(e) => {
+                                                                              e.stopPropagation();
+                                                                              setActiveTotalMenu(activeTotalMenu?.lessonId === b.id && activeTotalMenu?.type === 'hoc' ? null : { lessonId: b.id, type: 'hoc' });
+                                                                          }}
+                                                                      >
+                                                                          {hocCount}
+                                                                          {activeTotalMenu?.lessonId === b.id && activeTotalMenu?.type === 'hoc' && (
+                                                                              <div 
+                                                                                  className="absolute z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-3 left-1/2 -translate-x-1/2 bottom-full mb-1 text-[11px] text-slate-800 whitespace-nowrap min-w-[100px]"
+                                                                                  onClick={(e) => e.stopPropagation()}
+                                                                              >
+                                                                                  <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                      <span className="flex items-center gap-1.5"><span className="text-sm">✅</span> Đã học</span>
+                                                                                      <span className="font-black text-green-700">{hocCount}</span>
+                                                                                  </div>
+                                                                                  <div className="flex justify-between gap-4 py-1.5 items-center">
+                                                                                      <span className="flex items-center gap-1.5"><span className="text-sm">❌</span> Chưa học</span>
+                                                                                      <span className="font-black text-red-600">{nonNgungCvs.length - hocCount}</span>
+                                                                                  </div>
+                                                                              </div>
+                                                                          )}
+                                                                      </td>
+                                                                      <td 
+                                                                          className="relative px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-blue-700 cursor-pointer hover:bg-slate-200"
+                                                                          onClick={(e) => {
+                                                                              e.stopPropagation();
+                                                                              setActiveTotalMenu(activeTotalMenu?.lessonId === b.id && activeTotalMenu?.type === 'hanh' ? null : { lessonId: b.id, type: 'hanh' });
+                                                                          }}
+                                                                      >
+                                                                          {hanhCount}
+                                                                          {activeTotalMenu?.lessonId === b.id && activeTotalMenu?.type === 'hanh' && (
+                                                                              <div 
+                                                                                  className="absolute z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-3 left-1/2 -translate-x-1/2 bottom-full mb-1 text-[11px] text-slate-800 whitespace-nowrap min-w-[140px]"
+                                                                                  onClick={(e) => e.stopPropagation()}
+                                                                              >
+                                                                                  <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                      <span className="flex items-center gap-1.5"><span className="text-sm">🖤</span> Không làm</span>
+                                                                                      <span className="font-black">{nonNgungCvs.filter(cv => course.tracking?.[cv.id]?.[b.id]?.hanh === '🖤').length}</span>
+                                                                                  </div>
+                                                                                  <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                      <span className="flex items-center gap-1.5"><span className="text-sm">⭐</span> Làm đối phó</span>
+                                                                                      <span className="font-black">{nonNgungCvs.filter(cv => course.tracking?.[cv.id]?.[b.id]?.hanh === '⭐').length}</span>
+                                                                                  </div>
+                                                                                  <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                      <span className="flex items-center gap-1.5 text-sm tracking-tighter">⭐⭐ <span className="text-[11px] ml-1 font-normal tracking-normal text-slate-800">Làm tốt</span></span>
+                                                                                      <span className="font-black">{nonNgungCvs.filter(cv => course.tracking?.[cv.id]?.[b.id]?.hanh === '⭐⭐').length}</span>
+                                                                                  </div>
+                                                                                  <div className="flex justify-between gap-4 py-1.5 items-center">
+                                                                                      <span className="flex items-center gap-1.5 text-sm tracking-tighter">❤️❤️❤️ <span className="text-[11px] ml-1 font-normal tracking-normal text-slate-800">Xuất sắc</span></span>
+                                                                                      <span className="font-black text-rose-500">{nonNgungCvs.filter(cv => course.tracking?.[cv.id]?.[b.id]?.hanh === '❤️❤️❤️').length}</span>
+                                                                                  </div>
+                                                                              </div>
+                                                                          )}
+                                                                      </td>
                                                                   </React.Fragment>
                                                               )
                                                           })}
