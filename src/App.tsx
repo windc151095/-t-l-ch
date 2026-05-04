@@ -461,6 +461,32 @@ export default function App() {
     onCancel: () => void;
   }>({ show: false, message: '', onConfirm: () => {}, onCancel: () => {} });
 
+  const [passwordPromptDialog, setPasswordPromptDialog] = useState<{
+    show: boolean;
+    message: string;
+    onConfirm: (password: string) => void;
+    onCancel: () => void;
+  }>({ show: false, message: '', onConfirm: () => {}, onCancel: () => {} });
+  const [passwordPromptInput, setPasswordPromptInput] = useState('');
+
+  const customPasswordPrompt = (message: string): Promise<string | null> => {
+    setPasswordPromptInput('');
+    return new Promise((resolve) => {
+      setPasswordPromptDialog({
+        show: true,
+        message,
+        onConfirm: (password) => {
+          setPasswordPromptDialog(prev => ({ ...prev, show: false }));
+          resolve(password);
+        },
+        onCancel: () => {
+          setPasswordPromptDialog(prev => ({ ...prev, show: false }));
+          resolve(null);
+        }
+      });
+    });
+  };
+
   const customConfirm = (message: string): Promise<boolean> => {
     return new Promise((resolve) => {
       setConfirmDialog({
@@ -3352,11 +3378,11 @@ export default function App() {
                                             </h3>
                                             <div className="flex gap-1.5 p-1 bg-slate-50 rounded-lg border border-slate-100">
                                               <button 
-                                                onClick={(e) => {
+                                                onClick={async (e) => {
                                                   e.stopPropagation();
-                                                  const pwd = prompt("Vui lòng nhập mật khẩu Xóa để sửa khóa học:");
+                                                  const pwd = await customPasswordPrompt("Vui lòng nhập mật khẩu Xóa để sửa khóa học:");
                                                   if (pwd !== dbRolePasswords.delete) {
-                                                    alert("Mật khẩu không chính xác!");
+                                                    if (pwd !== null) setChromeAlert("Mật khẩu không chính xác!");
                                                     return;
                                                   }
                                                   setCourseForm({
@@ -3377,9 +3403,9 @@ export default function App() {
                                               <button 
                                                 onClick={async (e) => {
                                                   e.stopPropagation();
-                                                  const pwd = prompt("Vui lòng nhập mật khẩu Xóa để xóa khóa học:");
+                                                  const pwd = await customPasswordPrompt("Vui lòng nhập mật khẩu Xóa để xóa khóa học:");
                                                   if (pwd !== dbRolePasswords.delete) {
-                                                    alert("Mật khẩu không chính xác!");
+                                                    if (pwd !== null) setChromeAlert("Mật khẩu không chính xác!");
                                                     return;
                                                   }
                                                   if(await customConfirm('Bạn có chắc muốn xóa khóa học này?')) {
@@ -4270,14 +4296,22 @@ export default function App() {
                                                     const track = course.tracking?.[cv.id] || {};
                                                     for (const sId of sessionsIds) {
                                                       const fHoc = trackingFilters[`${sId}_hoc`];
-                                                      if (fHoc) {
+                                                      if (fHoc && Array.isArray(fHoc) && fHoc.length > 0) {
+                                                        const hocVal = track[sId]?.hoc;
+                                                        const strVal = hocVal === true ? '✅' : hocVal === false ? '❌' : 'Trống';
+                                                        if (!fHoc.includes(strVal)) return false;
+                                                      } else if (fHoc && typeof fHoc === 'string') {
                                                         const hocVal = track[sId]?.hoc;
                                                         const strVal = hocVal === true ? '✅' : hocVal === false ? '❌' : '';
                                                         const vLower = fHoc.toLowerCase();
                                                         if (!strVal.includes(vLower) && !(vLower === 'v' && hocVal === true) && !(vLower === 'x' && hocVal === false)) return false;
                                                       }
+
                                                       const fHanh = trackingFilters[`${sId}_hanh`];
-                                                      if (fHanh) {
+                                                      if (fHanh && Array.isArray(fHanh) && fHanh.length > 0) {
+                                                        const strHanh = track[sId]?.hanh || 'Trống';
+                                                        if (!fHanh.includes(strHanh)) return false;
+                                                      } else if (fHanh && typeof fHanh === 'string') {
                                                         const strHanh = track[sId]?.hanh || '';
                                                         if (!strHanh.toLowerCase().includes(fHanh.toLowerCase())) return false;
                                                       }
@@ -6687,6 +6721,56 @@ export default function App() {
                 >
                   OK
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {passwordPromptDialog.show && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={passwordPromptDialog.onCancel}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-10 p-6 border border-slate-100"
+            >
+              <h3 className="text-xl font-black text-slate-800 mb-2 font-display tracking-tight text-center">XÁC THỰC BẢO MẬT</h3>
+              <p className="text-xs text-slate-500 font-medium mb-6 text-center">{passwordPromptDialog.message}</p>
+              
+              <div className="space-y-4">
+                <input 
+                  type="password"
+                  placeholder="Nhập mật khẩu..."
+                  autoFocus
+                  value={passwordPromptInput}
+                  onChange={e => setPasswordPromptInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && passwordPromptDialog.onConfirm(passwordPromptInput)}
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-200 focus:border-blue-400 outline-none rounded-2xl font-bold text-slate-800 text-center tracking-[0.25em] shadow-inner transition-all"
+                />
+                
+                <div className="flex justify-end gap-3 mt-4">
+                  <button 
+                    onClick={passwordPromptDialog.onCancel}
+                    className="flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                  >
+                    HỦY
+                  </button>
+                  <button 
+                    onClick={() => passwordPromptDialog.onConfirm(passwordPromptInput)}
+                    className="flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-widest bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-900/20 transition-all active:scale-[0.98]"
+                  >
+                    XÁC NHẬN
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
