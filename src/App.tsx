@@ -3354,6 +3354,11 @@ export default function App() {
                                               <button 
                                                 onClick={(e) => {
                                                   e.stopPropagation();
+                                                  const pwd = prompt("Vui lòng nhập mật khẩu Xóa để sửa khóa học:");
+                                                  if (pwd !== dbRolePasswords.delete) {
+                                                    alert("Mật khẩu không chính xác!");
+                                                    return;
+                                                  }
                                                   setCourseForm({
                                                     name: course.name,
                                                     start: course.startDate,
@@ -3372,6 +3377,11 @@ export default function App() {
                                               <button 
                                                 onClick={async (e) => {
                                                   e.stopPropagation();
+                                                  const pwd = prompt("Vui lòng nhập mật khẩu Xóa để xóa khóa học:");
+                                                  if (pwd !== dbRolePasswords.delete) {
+                                                    alert("Mật khẩu không chính xác!");
+                                                    return;
+                                                  }
                                                   if(await customConfirm('Bạn có chắc muốn xóa khóa học này?')) {
                                                     await deleteDoc(doc(db, 'courses', course.id));
                                                     setSelectedCourseId(null);
