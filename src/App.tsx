@@ -295,6 +295,7 @@ export default function App() {
   const [trackingStampHanh, setTrackingStampHanh] = useState<string>('⭐');
   const [isEditingTracking, setIsEditingTracking] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
+  const [tableZoom, setTableZoom] = useState(100);
   const [isCustomizingTable, setIsCustomizingTable] = useState(false);
   const [tableColumnConfig, setTableColumnConfig] = useState<Record<string, { fixed: boolean; hidden: boolean }>>({
     stt: { fixed: true, hidden: false },
@@ -350,7 +351,7 @@ export default function App() {
     if (isHeader) {
        baseStyle.position = isHeaderFixed ? 'sticky' : 'static';
        baseStyle.top = isHeaderFixed ? 0 : 'auto';
-       baseStyle.zIndex = 40;
+       baseStyle.zIndex = 35;
     }
 
     if (!tableColumnConfig[colId]?.fixed) return baseStyle;
@@ -362,7 +363,7 @@ export default function App() {
         left += col.width;
       }
     }
-    return { ...baseStyle, left: `${left}px`, position: 'sticky', zIndex: isHeader ? (isHeaderFixed ? 50 : 30) : 20 };
+    return { ...baseStyle, left: `${left}px`, position: 'sticky', zIndex: isHeader ? (isHeaderFixed ? 45 : 30) : 25 };
   };
 
   const getColumnClass = (colId: string, customClass: string) => {
@@ -3598,7 +3599,7 @@ export default function App() {
                                     
                                     <div className="flex flex-col lg:flex-row gap-8 items-start">
                                       {/* Left Tabs pane */}
-                                      <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2 sticky top-[4.5rem]">
+                                      <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2 relative lg:sticky lg:top-[4.5rem] z-20">
                                         <div className="mb-4">
                                           <div className="relative">
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -3827,6 +3828,17 @@ export default function App() {
                                                   >
                                                     {isEditingTracking ? 'Lưu chỉnh sửa' : 'Chỉnh sửa'}
                                                   </button>
+                                                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                                                    <button 
+                                                      onClick={() => setTableZoom(Math.max(50, tableZoom - 10))}
+                                                      className="w-8 h-8 flex items-center justify-center bg-white rounded-lg text-slate-600 font-black shadow-sm hover:bg-slate-50 transition-colors"
+                                                    >-</button>
+                                                    <span className="text-xs font-bold text-slate-700 w-12 text-center">{tableZoom}%</span>
+                                                    <button 
+                                                      onClick={() => setTableZoom(Math.min(200, tableZoom + 10))}
+                                                      className="w-8 h-8 flex items-center justify-center bg-white rounded-lg text-slate-600 font-black shadow-sm hover:bg-slate-50 transition-colors"
+                                                    >+</button>
+                                                  </div>
                                                   <button
                                                     onClick={() => setIsTableExpanded(!isTableExpanded)}
                                                     className={cn(
@@ -3921,8 +3933,8 @@ export default function App() {
                                                 </div>
                                               )}
                                               <div className={cn(
-                                                "overflow-x-auto border border-slate-200",
-                                                isTableExpanded ? "fixed inset-0 z-50 bg-white p-4 max-h-screen" : "rounded-xl max-h-[70vh]"
+                                                "overflow-auto border border-slate-200 hide-scrollbar",
+                                                isTableExpanded ? "fixed inset-0 z-[60] bg-white p-4 max-h-screen" : "rounded-xl max-h-[70vh]"
                                               )}>
                                                 {isTableExpanded && isAdmin && (
                                                   <div className="flex flex-wrap items-center gap-4 mb-4">
@@ -3937,6 +3949,17 @@ export default function App() {
                                                     >
                                                       {isEditingTracking ? 'Lưu chỉnh sửa' : 'Chỉnh sửa'}
                                                     </button>
+                                                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                                                      <button 
+                                                        onClick={() => setTableZoom(Math.max(50, tableZoom - 10))}
+                                                        className="w-8 h-8 flex items-center justify-center bg-white rounded-lg text-slate-600 font-black shadow-sm hover:bg-slate-50 transition-colors"
+                                                      >-</button>
+                                                      <span className="text-xs font-bold text-slate-700 w-12 text-center">{tableZoom}%</span>
+                                                      <button 
+                                                        onClick={() => setTableZoom(Math.min(200, tableZoom + 10))}
+                                                        className="w-8 h-8 flex items-center justify-center bg-white rounded-lg text-slate-600 font-black shadow-sm hover:bg-slate-50 transition-colors"
+                                                      >+</button>
+                                                    </div>
                                                     <button
                                                       onClick={() => setIsTableExpanded(!isTableExpanded)}
                                                       className={cn(
@@ -4031,7 +4054,7 @@ export default function App() {
                                                   </div>
                                                 )}
                                                 <div className={cn("overflow-x-auto", isTableExpanded ? "max-h-[calc(100vh-100px)]" : "max-h-full")}>
-                                                  <table className="w-full text-sm text-left whitespace-nowrap" style={{ fontFamily: '"Google Sans", sans-serif' }}>
+                                                  <table className="w-full text-sm text-left whitespace-nowrap uppercase" style={{ fontFamily: '"Google Sans", sans-serif', zoom: tableZoom / 100 }}>
                                               <thead className={cn("text-[10px] uppercase font-black text-slate-800 text-center z-40 shadow-sm shadow-slate-200", isHeaderFixed ? "sticky top-0" : "")}>
                                                 <tr>
                                                   <th colSpan={(isAdmin && isEditingTracking) ? 23 : 22} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
