@@ -89,7 +89,8 @@ import {
   getDoc,
   orderBy,
   limit,
-  FirestoreError
+  FirestoreError,
+  arrayRemove
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -286,9 +287,13 @@ export default function App() {
   const [selectedLearningCvIds, setSelectedLearningCvIds] = useState<string[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [courseSearchText, setCourseSearchText] = useState('');
   const [courseDetailTab, setCourseDetailTab] = useState<'companion' | 'group' | 'tracking' | 'analytics'>('companion');
   const [assignFilter, setAssignFilter] = useState<string>('all');
   const [selectedStudentIdsForAssign, setSelectedStudentIdsForAssign] = useState<string[]>([]);
+  const [trackingStampHoc, setTrackingStampHoc] = useState<boolean | null>(true);
+  const [trackingStampHanh, setTrackingStampHanh] = useState<string>('⭐');
+  const [isEditingTracking, setIsEditingTracking] = useState(false);
   const [bulkAssignInput, setBulkAssignInput] = useState('');
   const [newEntityName, setNewEntityName] = useState('');
   const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
@@ -3205,7 +3210,7 @@ export default function App() {
                                     <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
                                       <div className="flex items-center gap-6">
                                         <button 
-                                          onClick={() => setSelectedCourseId(null)}
+                                          onClick={() => { setSelectedCourseId(null); setCourseSearchText(''); }}
                                           className="p-3 bg-slate-50 text-slate-500 hover:text-slate-800 rounded-2xl transition-all hover:scale-110 active:scale-95 border border-slate-100"
                                         >
                                           <ArrowLeft size={24} />
@@ -3468,6 +3473,18 @@ export default function App() {
                                     <div className="flex flex-col lg:flex-row gap-8 items-start">
                                       {/* Left Tabs pane */}
                                       <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2 sticky top-[4.5rem]">
+                                        <div className="mb-4">
+                                          <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                            <input 
+                                              type="text"
+                                              placeholder="Tìm tên, SĐT, Mã HV..."
+                                              value={courseSearchText}
+                                              onChange={e => setCourseSearchText(e.target.value)}
+                                              className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal focus:border-purple-400 focus:ring-2 focus:ring-purple-100 outline-none transition-all shadow-sm"
+                                            />
+                                          </div>
+                                        </div>
                                         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mb-1">
                                           Công tác phân bổ
                                         </div>
@@ -3504,9 +3521,20 @@ export default function App() {
                                       {/* Right Content pane */}
                                       <div className="flex-1 bg-white border border-slate-200 rounded-[2.5rem] p-8 flex flex-col gap-8 min-w-0 shadow-sm w-full">
                                         
-                                        {courseDetailTab === 'analytics' ? (() => {
-                                          const sortedForAnalytics = enrolledCvs.map(cv => {
-                                            const track = course.tracking?.[cv.id] || {};
+                                        {(() => {
+                                          const searchedText = courseSearchText.toLowerCase();
+                                          const searchedCvs = enrolledCvs.filter(cv => {
+                                            if (!searchedText) return true;
+                                            return (
+                                              (cv.fullName || '').toLowerCase().includes(searchedText) ||
+                                              (cv.phoneNumber || '').toLowerCase().includes(searchedText) ||
+                                              (cv.studentId || '').toLowerCase().includes(searchedText)
+                                            );
+                                          });
+                                          
+                                          if (courseDetailTab === 'analytics') {
+                                            const sortedForAnalytics = searchedCvs.map(cv => {
+                                              const track = course.tracking?.[cv.id] || {};
                                             let completedLessons = 0;
                                             ['buoiDinhHinh', 'buoi1', 'buoi2', 'buoi3', 'buoi4', 'buoi5', 'buoi6'].forEach(b => {
                                               if (track[b]?.hoc) completedLessons++;
@@ -3656,27 +3684,97 @@ export default function App() {
                                                 </div>
                                               </div>
                                             </div>
-                                          )
-                                        })() : courseDetailTab === 'tracking' ? (
-                                          <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[70vh]">
-                                            <table className="w-full text-sm text-left whitespace-nowrap" style={{ fontFamily: '"Google Sans", sans-serif' }}>
+                                          );
+                                        } else if (courseDetailTab === 'tracking') {
+                                          return (
+                                            <div className="flex flex-col gap-4">
+                                              {isAdmin && (
+                                                <div className="flex flex-wrap items-center gap-4">
+                                                  <button
+                                                    onClick={() => setIsEditingTracking(!isEditingTracking)}
+                                                    className={cn(
+                                                      "px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all",
+                                                      isEditingTracking 
+                                                        ? "bg-purple-600 text-white shadow-md shadow-purple-200" 
+                                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                    )}
+                                                  >
+                                                    {isEditingTracking ? 'Lưu chỉnh sửa' : 'Chỉnh sửa'}
+                                                  </button>
+                                                  {isEditingTracking && (
+                                                    <div className="flex flex-wrap items-center gap-6 bg-slate-50 px-4 py-2 border border-slate-200 rounded-xl">
+                                                  <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">Tem thẻ Học:</span>
+                                                    <div className="flex gap-1.5">
+                                                      {[
+                                                        { value: true, label: '✅' },
+                                                        { value: false, label: '❌' },
+                                                        { value: null, label: 'Trống' }
+                                                      ].map(opt => (
+                                                        <button
+                                                          key={String(opt.value)}
+                                                          onClick={() => setTrackingStampHoc(opt.value)}
+                                                          className={cn(
+                                                            "px-3 py-1.5 rounded-lg text-sm font-bold border transition-all",
+                                                            trackingStampHoc === opt.value
+                                                              ? "bg-white border-blue-400 shadow-sm ring-2 ring-blue-100"
+                                                              : "bg-transparent border-transparent hover:bg-slate-200 text-slate-500"
+                                                          )}
+                                                        >
+                                                          {opt.label}
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                  <div className="w-px h-6 bg-slate-300"></div>
+                                                  <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">Tem thẻ Hành:</span>
+                                                    <div className="flex gap-1.5">
+                                                      {[
+                                                        { value: '🖤', label: '🖤' },
+                                                        { value: '⭐', label: '⭐' },
+                                                        { value: '⭐⭐', label: '⭐⭐' },
+                                                        { value: '❤️❤️❤️', label: '❤️❤️❤️' },
+                                                        { value: '', label: 'Trống' }
+                                                      ].map(opt => (
+                                                        <button
+                                                          key={opt.value}
+                                                          onClick={() => setTrackingStampHanh(opt.value)}
+                                                          className={cn(
+                                                            "px-3 py-1.5 rounded-lg text-sm font-bold border transition-all",
+                                                            trackingStampHanh === opt.value
+                                                              ? "bg-white border-purple-400 shadow-sm ring-2 ring-purple-100"
+                                                              : "bg-transparent border-transparent hover:bg-slate-200 text-slate-500"
+                                                          )}
+                                                        >
+                                                          {opt.label}
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                                )}
+                                                </div>
+                                              )}
+                                              <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[70vh]">
+                                                <table className="w-full text-sm text-left whitespace-nowrap" style={{ fontFamily: '"Google Sans", sans-serif' }}>
                                               <thead className="text-[10px] uppercase font-black text-slate-800 text-center sticky top-0 z-10 shadow-sm shadow-slate-200">
                                                 <tr>
-                                                  <th colSpan={22} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
+                                                  <th colSpan={(isAdmin && isEditingTracking) ? 23 : 22} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
                                                 </tr>
                                                 <tr>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle sticky left-0 z-30 shadow-[1px_0_0_#E2E8F0] w-[40px] min-w-[40px] max-w-[40px]">
                                                     STT
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle sticky left-[40px] z-30 shadow-[1px_0_0_#E2E8F0] w-[140px] min-w-[140px] max-w-[140px]">
                                                     NGƯỜI ĐỒNG HÀNH
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.companion} onChange={e => setTrackingFilters(f => ({...f, companion: e.target.value}))} />
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle">
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle sticky left-[180px] z-30 shadow-[1px_0_0_#E2E8F0] w-[80px] min-w-[80px] max-w-[80px]">
                                                     MÃ HỌC VIÊN
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.studentId} onChange={e => setTrackingFilters(f => ({...f, studentId: e.target.value}))} />
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle">
+                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle sticky left-[260px] z-30 shadow-[1px_0_0_#E2E8F0] w-[160px] min-w-[160px] max-w-[160px]">
                                                     HỌ TÊN
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.fullName} onChange={e => setTrackingFilters(f => ({...f, fullName: e.target.value}))} />
                                                   </th>
@@ -3706,6 +3804,7 @@ export default function App() {
                                                       {b.label}
                                                     </th>
                                                   ))}
+                                                  {(isAdmin && isEditingTracking) && <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-red-100 text-red-600 align-middle">XÓA</th>}
                                                 </tr>
                                                 <tr>
                                                   {[1,2,3,4,5,6,7].map(i => (
@@ -3718,7 +3817,7 @@ export default function App() {
                                               </thead>
                                               <tbody className="text-[10px]">
                                                 {(() => {
-                                                  const sorted = [...enrolledCvs].filter(cv => {
+                                                  const sorted = [...searchedCvs].filter(cv => {
                                                     if (trackingFilters.companion && !(cv.companion || '').toLowerCase().includes(trackingFilters.companion.toLowerCase())) return false;
                                                     if (trackingFilters.studentId && !(cv.studentId || '').toLowerCase().includes(trackingFilters.studentId.toLowerCase())) return false;
                                                     if (trackingFilters.fullName && !(cv.fullName || '').toLowerCase().includes(trackingFilters.fullName.toLowerCase())) return false;
@@ -3761,13 +3860,68 @@ export default function App() {
 
                                                     return (
                                                       <tr key={cv.id} className="border-b border-[#E2E8F0] hover:bg-slate-50 text-center font-bold text-[10px]">
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9]">{index + 1}</td>
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] whitespace-normal min-w-[100px]">{cv.companion}</td>
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] text-purple-700">{cv.studentId}</td>
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD] whitespace-normal min-w-[120px] text-left">{cv.fullName}</td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] sticky left-0 z-20 w-[40px] shadow-[1px_0_0_#E2E8F0]">{index + 1}</td>
+                                                        <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] whitespace-normal sticky left-[40px] z-20 w-[140px] shadow-[1px_0_0_#E2E8F0]">
+                                                          {(isAdmin && isEditingTracking) ? (
+                                                            <select 
+                                                              value={cv.companion || ""} 
+                                                              onChange={async (e) => {
+                                                                const val = e.target.value;
+                                                                try {
+                                                                  await updateDoc(doc(db, 'cvs', cv.id), { companion: val || deleteField() });
+                                                                } catch (err) {
+                                                                  console.error(err);
+                                                                }
+                                                              }}
+                                                              className="w-full text-[10px] bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-green-500 rounded px-1 py-0.5 outline-none cursor-pointer"
+                                                            >
+                                                              <option value="">- Chọn -</option>
+                                                              {(course.companions || []).map(c => <option key={c} value={c}>{c}</option>)}
+                                                            </select>
+                                                          ) : (cv.companion)}
+                                                        </td>
+                                                        <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] text-purple-700 sticky left-[180px] z-20 w-[80px] shadow-[1px_0_0_#E2E8F0]">
+                                                          {(isAdmin && isEditingTracking) ? (
+                                                            <input
+                                                              key={`student-id-${cv.id}-${cv.studentId || ''}`}
+                                                              type="text"
+                                                              className="w-full text-center text-[10px] font-bold text-purple-700 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-purple-500 rounded px-1 py-0.5 outline-none"
+                                                              defaultValue={cv.studentId || ''}
+                                                              onBlur={async (e) => {
+                                                                const val = e.target.value.trim();
+                                                                if (val !== (cv.studentId || '')) {
+                                                                  try {
+                                                                    await updateDoc(doc(db, 'cvs', cv.id), { studentId: val || deleteField() });
+                                                                  } catch (err) {
+                                                                    console.error(err);
+                                                                  }
+                                                                }
+                                                              }}
+                                                            />
+                                                          ) : (cv.studentId)}
+                                                        </td>
+                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD] whitespace-normal text-left sticky left-[260px] z-20 w-[160px] shadow-[1px_0_0_#E2E8F0]">{cv.fullName}</td>
                                                         <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD]">{cv.age}</td>
                                                         <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]">{cv.guideName}</td>
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]">{cv.studyGroup}</td>
+                                                        <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]">
+                                                          {(isAdmin && isEditingTracking) ? (
+                                                            <select 
+                                                              value={cv.studyGroup || ""} 
+                                                              onChange={async (e) => {
+                                                                const val = e.target.value;
+                                                                try {
+                                                                  await updateDoc(doc(db, 'cvs', cv.id), { studyGroup: val || deleteField() });
+                                                                } catch (err) {
+                                                                  console.error(err);
+                                                                }
+                                                              }}
+                                                              className="w-full text-[10px] bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-purple-500 rounded px-1 py-0.5 outline-none cursor-pointer"
+                                                            >
+                                                              <option value="">- Chọn -</option>
+                                                              {(course.studyGroups || []).map(g => <option key={g} value={g}>{g}</option>)}
+                                                            </select>
+                                                          ) : (cv.studyGroup)}
+                                                        </td>
                                                         <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5] whitespace-normal min-w-[100px]">
                                                           {cv.facebookLink ? <a href={cv.facebookLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Link</a> : ''}
                                                         </td>
@@ -3782,35 +3936,53 @@ export default function App() {
                                                         ].map(b => (
                                                           <React.Fragment key={b.id}>
                                                             <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
-                                                              <button 
-                                                                onClick={() => {
-                                                                  let nextVal;
-                                                                  const current = track[b.id]?.hoc;
-                                                                  if (current === true) nextVal = false;
-                                                                  else if (current === false) nextVal = null;
-                                                                  else nextVal = true;
-                                                                  updateTracking(b.id, 'hoc', nextVal);
-                                                                }}
-                                                                className="text-sm w-full h-full flex justify-center items-center rounded hover:bg-[#FFE082]"
-                                                              >
-                                                                {track[b.id]?.hoc === true ? '✅' : track[b.id]?.hoc === false ? '❌' : ''}
-                                                              </button>
+                                                              {(isAdmin && isEditingTracking) ? (
+                                                                <button 
+                                                                  onClick={() => updateTracking(b.id, 'hoc', trackingStampHoc)}
+                                                                  className="text-sm w-full h-full min-h-[24px] flex justify-center items-center rounded hover:bg-[#FFE082]"
+                                                                >
+                                                                  {track[b.id]?.hoc === true ? '✅' : track[b.id]?.hoc === false ? '❌' : ''}
+                                                                </button>
+                                                              ) : (
+                                                                <div className="text-sm w-full h-full flex justify-center items-center py-1">{track[b.id]?.hoc === true ? '✅' : track[b.id]?.hoc === false ? '❌' : ''}</div>
+                                                              )}
                                                             </td>
                                                             <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
-                                                              <select
-                                                                value={track[b.id]?.hanh || ''}
-                                                                onChange={(e) => updateTracking(b.id, 'hanh', e.target.value)}
-                                                                className="bg-transparent text-xs w-[55px] font-bold outline-none cursor-pointer text-center appearance-none"
-                                                              >
-                                                                <option value=""></option>
-                                                                <option value="🖤">🖤</option>
-                                                                <option value="⭐">⭐</option>
-                                                                <option value="⭐⭐">⭐⭐</option>
-                                                                <option value="❤️❤️❤️">❤️❤️❤️</option>
-                                                              </select>
+                                                              {(isAdmin && isEditingTracking) ? (
+                                                                <button 
+                                                                  onClick={() => updateTracking(b.id, 'hanh', trackingStampHanh)}
+                                                                  className="text-sm w-full h-full min-h-[24px] flex justify-center items-center rounded hover:bg-[#FFE082]"
+                                                                >
+                                                                  {track[b.id]?.hanh || ''}
+                                                                </button>
+                                                              ) : (
+                                                                <div className="text-sm w-full h-full flex justify-center items-center py-1">{track[b.id]?.hanh || ''}</div>
+                                                              )}
                                                             </td>
                                                           </React.Fragment>
                                                         ))}
+                                                        {(isAdmin && isEditingTracking) && (
+                                                          <td className="px-1 py-1 border-r border-[#E2E8F0] bg-red-50 text-center">
+                                                            <button
+                                                              title="Xóa khỏi khóa học"
+                                                              onClick={async () => {
+                                                                if (await customConfirm(`Đưa CV học viên này khỏi khóa học?`)) {
+                                                                  try {
+                                                                    await updateDoc(doc(db, 'courses', course.id), {
+                                                                      studentIds: arrayRemove(cv.id)
+                                                                    });
+                                                                  } catch (err) {
+                                                                    console.error(err);
+                                                                    setChromeAlert('Lỗi khi xóa!');
+                                                                  }
+                                                                }
+                                                              }}
+                                                              className="text-red-500 hover:text-red-700 hover:bg-red-200 p-1 rounded transition-colors"
+                                                            >
+                                                              <Trash2 size={12} />
+                                                            </button>
+                                                          </td>
+                                                        )}
                                                       </tr>
                                                     );
                                                   });
@@ -3818,9 +3990,12 @@ export default function App() {
                                               </tbody>
                                             </table>
                                           </div>
-                                        ) : (
-                                          <>
-                                            {/* Management Section */}
+                                          </div>
+                                        );
+                                        } else {
+                                          return (
+                                            <>
+                                              {/* Management Section */}
                                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
                                           <h4 className="font-bold text-slate-800 text-sm">
                                             {courseDetailTab === 'companion' ? 'Danh sách Người đồng hành' : 'Danh sách Group học tập'}
@@ -3857,8 +4032,8 @@ export default function App() {
                                           <div className="flex flex-wrap gap-2 mt-2">
                                             {(courseDetailTab === 'companion' ? (course.companions || []) : (course.studyGroups || [])).map(item => {
                                               const assignCount = courseDetailTab === 'companion' 
-                                                ? enrolledCvs.filter(c => c.companion === item).length
-                                                : enrolledCvs.filter(c => c.studyGroup === item).length;
+                                                ? searchedCvs.filter(c => c.companion === item).length
+                                                : searchedCvs.filter(c => c.studyGroup === item).length;
                                               return (
                                               <div key={item} className={cn("flex items-center gap-1.5 px-3 py-1 bg-white border rounded-lg text-xs font-bold shadow-sm", getColorForString(item))}>
                                                 {item} <span className="opacity-75">({assignCount})</span>
@@ -3873,7 +4048,7 @@ export default function App() {
                                                       });
 
                                                       // Also clear from all assigned CVs
-                                                      const cvsToClear = enrolledCvs.filter(cv => cv[cvField] === item);
+                                                      const cvsToClear = searchedCvs.filter(cv => cv[cvField] === item);
                                                       await Promise.all(cvsToClear.map(cv => 
                                                         updateDoc(doc(db, 'cvs', cv.id), {
                                                           [cvField]: ''
@@ -3895,7 +4070,7 @@ export default function App() {
                                         </div>
 
                                         {courseDetailTab === 'companion' ? (() => {
-                                          const filteredCvs = enrolledCvs.filter(cv => {
+                                          const filteredCvs = searchedCvs.filter(cv => {
                                             if (assignFilter === 'all') return true;
                                             if (assignFilter === 'unassigned') return !cv.companion;
                                             return cv.companion === assignFilter;
@@ -4051,7 +4226,7 @@ export default function App() {
                                           </div>
                                         )})() : (
                                           (() => {
-                                            const filteredCvs = enrolledCvs.filter(cv => {
+                                            const filteredCvs = searchedCvs.filter(cv => {
                                               if (assignFilter === 'all') return true;
                                               if (assignFilter === 'unassigned') return !cv.studyGroup;
                                               return cv.studyGroup === assignFilter;
@@ -4235,16 +4410,19 @@ export default function App() {
                                             </div>
                                           </div>
                                         );
-                                      })() ) }
-                                      </>
+                                      })()
                                       )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              }
+                                      </>
+                                    );
+                                  }
+                                })()}
+                                </div>
+                              </div>
+                              </div>
+                            );
+                          }
 
-                              const displayedCvs = getFilteredCVs();
+                          const displayedCvs = getFilteredCVs();
                               
                               
                               return (
@@ -4344,10 +4522,10 @@ export default function App() {
                                   </>
                                 );
                               })()}
-                          </div>
-                        </>
-                      )}
-                    </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                   </motion.div>
                 )}
               </div>
