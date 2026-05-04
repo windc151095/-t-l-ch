@@ -295,10 +295,125 @@ export default function App() {
   const [trackingStampHanh, setTrackingStampHanh] = useState<string>('⭐');
   const [isEditingTracking, setIsEditingTracking] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
+  const [isCustomizingTable, setIsCustomizingTable] = useState(false);
+  const [tableColumnConfig, setTableColumnConfig] = useState<Record<string, { fixed: boolean; hidden: boolean }>>({
+    stt: { fixed: true, hidden: false },
+    companion: { fixed: true, hidden: false },
+    studentId: { fixed: true, hidden: false },
+    fullName: { fixed: true, hidden: false },
+    age: { fixed: false, hidden: false },
+    guideName: { fixed: false, hidden: false },
+    studyGroup: { fixed: false, hidden: false },
+    fbLink: { fixed: false, hidden: false }
+  });
+  const [activeColumnMenu, setActiveColumnMenu] = useState<string | null>(null);
+  const [isHeaderFixed, setIsHeaderFixed] = useState(true);
+
   const [bulkAssignInput, setBulkAssignInput] = useState('');
   const [newEntityName, setNewEntityName] = useState('');
   const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const columnsDef = [
+    { id: 'stt', width: 40, label: 'STT' },
+    { id: 'companion', width: 140, label: 'NGƯỜI ĐỒNG HÀNH' },
+    { id: 'studentId', width: 80, label: 'MÃ HỌC VIÊN' },
+    { id: 'fullName', width: 160, label: 'HỌ TÊN' },
+    { id: 'age', width: 60, label: 'TUỔI' },
+    { id: 'guideName', width: 80, label: 'HDV' },
+    { id: 'studyGroup', width: 100, label: 'GROUP HỌC TẬP' },
+    { id: 'fbLink', width: 100, label: 'FACEBOOK' }
+  ];
+
+  const getColumnStyle = (colId: string, isHeader: boolean = false): React.CSSProperties => {
+    const colDef = columnsDef.find(c => c.id === colId);
+    const width = colDef ? colDef.width : 'auto';
+    
+    if (tableColumnConfig[colId]?.hidden) return { display: 'none' };
+    
+    const baseStyle: any = { 
+      width: `${width}px`, 
+      minWidth: `${width}px`, 
+      maxWidth: `${width}px` 
+    };
+
+    if (isHeader) {
+       baseStyle.position = isHeaderFixed ? 'sticky' : 'static';
+       baseStyle.top = isHeaderFixed ? 0 : 'auto';
+       baseStyle.zIndex = 40;
+    }
+
+    if (!tableColumnConfig[colId]?.fixed) return baseStyle;
+    
+    let left = 0;
+    for (const col of columnsDef) {
+      if (col.id === colId) break;
+      if (tableColumnConfig[col.id]?.fixed && !tableColumnConfig[col.id]?.hidden) {
+        left += col.width;
+      }
+    }
+    return { ...baseStyle, left: `${left}px`, position: 'sticky', zIndex: isHeader ? (isHeaderFixed ? 50 : 30) : 20 };
+  };
+
+  const getColumnClass = (colId: string, customClass: string) => {
+    if (tableColumnConfig[colId]?.hidden) return "hidden";
+    return cn(
+      customClass,
+      tableColumnConfig[colId]?.fixed ? "shadow-[1px_0_0_#E2E8F0]" : ""
+    );
+  };
+
+  const renderColumnMenu = (colId: string) => {
+    if (!isCustomizingTable) return null;
+    const isMenuOpen = activeColumnMenu === colId;
+    const isFixed = tableColumnConfig[colId]?.fixed;
+    return (
+      <div className="relative inline-block ml-1">
+        <button 
+          onClick={(e) => { e.stopPropagation(); setActiveColumnMenu(isMenuOpen ? null : colId); }}
+          className="text-slate-500 hover:text-slate-800 focus:outline-none bg-white/50 rounded"
+        >
+          <ChevronDown size={14} />
+        </button>
+        {isMenuOpen && (
+          <div className="absolute top-full left-0 mt-1 w-[130px] bg-white border border-slate-200 rounded-lg shadow-lg z-[90] py-1 text-left font-normal normal-case text-[11px] font-sans">
+            <button 
+              className="w-full px-3 py-1.5 text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+               onClick={(e) => {
+                 e.stopPropagation();
+                 setTableColumnConfig(prev => ({...prev, [colId]: { ...prev[colId], fixed: !isFixed }}));
+                 setActiveColumnMenu(null);
+               }}
+            >
+              {isFixed ? 'Bỏ cố định cột' : 'Cố định cột'}
+            </button>
+            <button 
+              className="w-full px-3 py-1.5 text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+               onClick={(e) => {
+                 e.stopPropagation();
+                 setIsHeaderFixed(!isHeaderFixed);
+                 setActiveColumnMenu(null);
+               }}
+            >
+              {isHeaderFixed ? 'Bỏ cố định hàng' : 'Cố định hàng'}
+            </button>
+            <button 
+              className="w-full px-3 py-1.5 text-red-600 hover:bg-red-50 flex items-center gap-2"
+              onClick={(e) => {
+                 e.stopPropagation();
+                 setTableColumnConfig(prev => ({...prev, [colId]: { ...prev[colId], hidden: true }}));
+                 setActiveColumnMenu(null);
+              }}
+            >
+              Ẩn cột
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+
 
   const handleCopyTemplate = async () => {
     const cvTemplate = `CV - ĐĂNG KÝ HỌC TẬP\n........................................\n1. Họ tên:\n2. Điện thoại:\n3. Tuổi:\n4. Địa Chỉ:\n5. Công Việc:\n6. Mong muốn:`;
@@ -3711,8 +3826,35 @@ export default function App() {
                                                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                                                     )}
                                                   >
-                                                    {isTableExpanded ? 'Thu nhỏ' : 'Mở rộng'}
+                                                    {isTableExpanded ? 'Thu nhỏ bảng' : 'Mở rộng bảng'}
                                                   </button>
+                                                  <button
+                                                    onClick={() => setIsCustomizingTable(!isCustomizingTable)}
+                                                    className={cn(
+                                                      "px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all",
+                                                      isCustomizingTable 
+                                                        ? "bg-blue-600 text-white shadow-md shadow-blue-200" 
+                                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                    )}
+                                                  >
+                                                    {isCustomizingTable ? 'Xong tùy chỉnh' : 'Tùy chỉnh cột'}
+                                                  </button>
+                                                  {Object.values(tableColumnConfig).some(c => c.hidden) && (
+                                                    <button
+                                                      onClick={() => {
+                                                        setTableColumnConfig(prev => {
+                                                          const reset = {...prev};
+                                                          for (const key in reset) {
+                                                            reset[key].hidden = false;
+                                                          }
+                                                          return reset;
+                                                        });
+                                                      }}
+                                                      className="px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all bg-green-100 text-green-700 hover:bg-green-200"
+                                                    >
+                                                      Khôi phục cột ẩn
+                                                    </button>
+                                                  )}
                                                   {isEditingTracking && (
                                                     <div className="flex flex-wrap items-center gap-6 bg-slate-50 px-4 py-2 border border-slate-200 rounded-xl">
                                                   <div className="flex items-center gap-3">
@@ -3794,8 +3936,35 @@ export default function App() {
                                                           : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                                                       )}
                                                     >
-                                                      {isTableExpanded ? 'Thu nhỏ' : 'Mở rộng'}
+                                                      {isTableExpanded ? 'Thu nhỏ bảng' : 'Mở rộng bảng'}
                                                     </button>
+                                                    <button
+                                                      onClick={() => setIsCustomizingTable(!isCustomizingTable)}
+                                                      className={cn(
+                                                        "px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all",
+                                                        isCustomizingTable 
+                                                          ? "bg-blue-600 text-white shadow-md shadow-blue-200" 
+                                                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                      )}
+                                                    >
+                                                      {isCustomizingTable ? 'Xong tùy chỉnh' : 'Tùy chỉnh cột'}
+                                                    </button>
+                                                    {Object.values(tableColumnConfig).some(c => c.hidden) && (
+                                                      <button
+                                                        onClick={() => {
+                                                          setTableColumnConfig(prev => {
+                                                            const reset = {...prev};
+                                                            for (const key in reset) {
+                                                              reset[key].hidden = false;
+                                                            }
+                                                            return reset;
+                                                          });
+                                                        }}
+                                                        className="px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all bg-green-100 text-green-700 hover:bg-green-200"
+                                                      >
+                                                        Khôi phục cột ẩn
+                                                      </button>
+                                                    )}
                                                     {isEditingTracking && (
                                                       <div className="flex flex-wrap items-center gap-6 bg-slate-50 px-4 py-2 border border-slate-200 rounded-xl">
                                                         <div className="flex items-center gap-3">
@@ -3853,39 +4022,73 @@ export default function App() {
                                                 )}
                                                 <div className={cn("overflow-x-auto", isTableExpanded ? "max-h-[calc(100vh-100px)]" : "max-h-full")}>
                                                   <table className="w-full text-sm text-left whitespace-nowrap" style={{ fontFamily: '"Google Sans", sans-serif' }}>
-                                              <thead className="text-[10px] uppercase font-black text-slate-800 text-center sticky top-0 z-40 shadow-sm shadow-slate-200">
+                                              <thead className={cn("text-[10px] uppercase font-black text-slate-800 text-center z-40 shadow-sm shadow-slate-200", isHeaderFixed ? "sticky top-0" : "")}>
                                                 <tr>
                                                   <th colSpan={(isAdmin && isEditingTracking) ? 23 : 22} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
                                                 </tr>
                                                 <tr>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle sticky left-0 z-30 shadow-[1px_0_0_#E2E8F0] w-[40px] min-w-[40px] max-w-[40px]">
-                                                    STT
+                                                  <th 
+                                                    style={getColumnStyle('stt', true)}
+                                                    className={getColumnClass('stt', "px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle")}
+                                                    rowSpan={2}
+                                                  >
+                                                    <div className="flex items-center justify-center gap-1">STT{renderColumnMenu('stt')}</div>
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle sticky left-[40px] z-30 shadow-[1px_0_0_#E2E8F0] w-[140px] min-w-[140px] max-w-[140px]">
-                                                    NGƯỜI ĐỒNG HÀNH
+                                                  <th 
+                                                    style={getColumnStyle('companion', true)}
+                                                    className={getColumnClass('companion', "px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle")}
+                                                    rowSpan={2}
+                                                  >
+                                                    <div className="flex items-center justify-center gap-1">NGƯỜI ĐỒNG HÀNH{renderColumnMenu('companion')}</div>
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.companion} onChange={e => setTrackingFilters(f => ({...f, companion: e.target.value}))} />
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle sticky left-[180px] z-30 shadow-[1px_0_0_#E2E8F0] w-[80px] min-w-[80px] max-w-[80px]">
-                                                    MÃ HỌC VIÊN
+                                                  <th 
+                                                    style={getColumnStyle('studentId', true)}
+                                                    className={getColumnClass('studentId', "px-2 py-1 border-r border-[#E2E8F0] bg-[#CCE5CC] align-middle")}
+                                                    rowSpan={2}
+                                                  >
+                                                    <div className="flex items-center justify-center gap-1">MÃ HỌC VIÊN{renderColumnMenu('studentId')}</div>
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.studentId} onChange={e => setTrackingFilters(f => ({...f, studentId: e.target.value}))} />
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle sticky left-[260px] z-30 shadow-[1px_0_0_#E2E8F0] w-[160px] min-w-[160px] max-w-[160px]">
-                                                    HỌ TÊN
+                                                  <th 
+                                                    style={getColumnStyle('fullName', true)}
+                                                    className={getColumnClass('fullName', "px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle")}
+                                                    rowSpan={2}
+                                                  >
+                                                    <div className="flex items-center justify-center gap-1">HỌ TÊN{renderColumnMenu('fullName')}</div>
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.fullName} onChange={e => setTrackingFilters(f => ({...f, fullName: e.target.value}))} />
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle">
-                                                    TUỔI
+                                                  <th 
+                                                    style={getColumnStyle('age', true)}
+                                                    className={getColumnClass('age', "px-2 py-1 border-r border-[#E2E8F0] bg-[#B3D4FF] align-middle")}
+                                                    rowSpan={2}
+                                                  >
+                                                    <div className="flex items-center justify-center gap-1">TUỔI{renderColumnMenu('age')}</div>
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-10 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.age} onChange={e => setTrackingFilters(f => ({...f, age: e.target.value}))} />
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">
-                                                    HDV
+                                                  <th 
+                                                    style={getColumnStyle('guideName', true)}
+                                                    className={getColumnClass('guideName', "px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle")}
+                                                    rowSpan={2}
+                                                  >
+                                                    <div className="flex items-center justify-center gap-1">HDV{renderColumnMenu('guideName')}</div>
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.guideName} onChange={e => setTrackingFilters(f => ({...f, guideName: e.target.value}))} />
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">
-                                                    GROUP HỌC TẬP
+                                                  <th 
+                                                    style={getColumnStyle('studyGroup', true)}
+                                                    className={getColumnClass('studyGroup', "px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle")}
+                                                    rowSpan={2}
+                                                  >
+                                                    <div className="flex items-center justify-center gap-1">GROUP HỌC TẬP{renderColumnMenu('studyGroup')}</div>
                                                     <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.studyGroup} onChange={e => setTrackingFilters(f => ({...f, studyGroup: e.target.value}))} />
                                                   </th>
-                                                  <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle">FACEBOOK</th>
+                                                  <th 
+                                                    style={getColumnStyle('fbLink', true)}
+                                                    className={getColumnClass('fbLink', "px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle")}
+                                                    rowSpan={2}
+                                                  >
+                                                    <div className="flex items-center justify-center gap-1">FACEBOOK{renderColumnMenu('fbLink')}</div>
+                                                  </th>
                                                   {[
                                                     { id: 'buoiDinhHinh', label: 'BUỔI ĐỊNH HÌNH' },
                                                     { id: 'buoi1', label: 'BUỔI 1' },
@@ -3921,6 +4124,11 @@ export default function App() {
                                                     if (trackingFilters.studyGroup && !(cv.studyGroup || '').toLowerCase().includes(trackingFilters.studyGroup.toLowerCase())) return false;
                                                     return true;
                                                   }).sort((a,b) => {
+                                                    const isNgungA = (a.studyGroup || '').toLowerCase().includes('ngừng');
+                                                    const isNgungB = (b.studyGroup || '').toLowerCase().includes('ngừng');
+                                                    if (isNgungA && !isNgungB) return 1;
+                                                    if (!isNgungA && isNgungB) return -1;
+
                                                     const sgA = a.studyGroup || 'ZZZ';
                                                     const sgB = b.studyGroup || 'ZZZ';
                                                     if (sgA !== sgB) return sgA.localeCompare(sgB);
@@ -3935,7 +4143,10 @@ export default function App() {
 
                                                     return a.fullName.localeCompare(b.fullName);
                                                   });
-                                                  return sorted.map((cv, index) => {
+                                                  const activeCvsForSorted = sorted.filter(cv => !(cv.studyGroup || '').toLowerCase().includes('ngừng'));
+                                                  const ngungCvsForSorted = sorted.filter(cv => (cv.studyGroup || '').toLowerCase().includes('ngừng'));
+
+                                                  const renderRow = (cv: any, index: number) => {
                                                     const track = course.tracking?.[cv.id] || {};
                                                     const updateTracking = async (lesson: string, field: 'hoc' | 'hanh', value: any) => {
                                                       const currentTracking = course.tracking || {};
@@ -3955,8 +4166,14 @@ export default function App() {
 
                                                     return (
                                                       <tr key={cv.id} className="border-b border-[#E2E8F0] hover:bg-slate-50 text-center font-bold text-[10px]">
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] sticky left-0 z-20 w-[40px] shadow-[1px_0_0_#E2E8F0]">{index + 1}</td>
-                                                        <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] whitespace-normal sticky left-[40px] z-20 w-[140px] shadow-[1px_0_0_#E2E8F0]">
+                                                        <td 
+                                                          style={getColumnStyle('stt')}
+                                                          className={getColumnClass('stt', "px-2 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9]")}
+                                                        >{index + 1}</td>
+                                                        <td 
+                                                          style={getColumnStyle('companion')}
+                                                          className={getColumnClass('companion', "px-1 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] whitespace-normal")}
+                                                        >
                                                           {(isAdmin && isEditingTracking) ? (
                                                             <select 
                                                               value={cv.companion || ""} 
@@ -3975,7 +4192,10 @@ export default function App() {
                                                             </select>
                                                           ) : (cv.companion)}
                                                         </td>
-                                                        <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] text-purple-700 sticky left-[180px] z-20 w-[80px] shadow-[1px_0_0_#E2E8F0]">
+                                                        <td 
+                                                          style={getColumnStyle('studentId')}
+                                                          className={getColumnClass('studentId', "px-1 py-1 border-r border-[#E2E8F0] bg-[#E8F5E9] text-purple-700")}
+                                                        >
                                                           {(isAdmin && isEditingTracking) ? (
                                                             <input
                                                               key={`student-id-${cv.id}-${cv.studentId || ''}`}
@@ -3995,10 +4215,22 @@ export default function App() {
                                                             />
                                                           ) : (cv.studentId)}
                                                         </td>
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD] whitespace-normal text-left sticky left-[260px] z-20 w-[160px] shadow-[1px_0_0_#E2E8F0]">{cv.fullName}</td>
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD]">{cv.age}</td>
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]">{cv.guideName}</td>
-                                                        <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]">
+                                                        <td 
+                                                          style={getColumnStyle('fullName')}
+                                                          className={getColumnClass('fullName', "px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD] whitespace-normal text-left")}
+                                                        >{cv.fullName}</td>
+                                                        <td 
+                                                          style={getColumnStyle('age')}
+                                                          className={getColumnClass('age', "px-2 py-1 border-r border-[#E2E8F0] bg-[#E3F2FD]")}
+                                                        >{cv.age}</td>
+                                                        <td 
+                                                          style={getColumnStyle('guideName')}
+                                                          className={getColumnClass('guideName', "px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]")}
+                                                        >{cv.guideName}</td>
+                                                        <td 
+                                                          style={getColumnStyle('studyGroup')}
+                                                          className={getColumnClass('studyGroup', "px-1 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]")}
+                                                        >
                                                           {(isAdmin && isEditingTracking) ? (
                                                             <select 
                                                               value={cv.studyGroup || ""} 
@@ -4017,7 +4249,10 @@ export default function App() {
                                                             </select>
                                                           ) : (cv.studyGroup)}
                                                         </td>
-                                                        <td className="px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5] whitespace-normal min-w-[100px]">
+                                                        <td 
+                                                          style={getColumnStyle('fbLink')}
+                                                          className={getColumnClass('fbLink', "px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5] whitespace-normal")}
+                                                        >
                                                           {cv.facebookLink ? <a href={cv.facebookLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Link</a> : ''}
                                                         </td>
                                                         {[
@@ -4080,7 +4315,111 @@ export default function App() {
                                                         )}
                                                       </tr>
                                                     );
-                                                  });
+                                                  };
+                                                  
+                                                  const activeMappedRows = activeCvsForSorted.map((cv, index) => renderRow(cv, index));
+                                                  const ngungMappedRows = ngungCvsForSorted.map((cv, index) => renderRow(cv, activeCvsForSorted.length + index));
+                                                  
+                                                  return (
+                                                    <>
+                                                      {activeMappedRows}
+                                                      <tr className="border-b border-t border-[#E2E8F0] font-black text-slate-800 text-[11px] bg-[#E2E8F0]">
+                                                          {columnsDef.map(col => {
+                                                              const isFullName = col.id === 'fullName';
+                                                              return (
+                                                                  <td 
+                                                                      key={`total-${col.id}`}
+                                                                      style={getColumnStyle(col.id)}
+                                                                      className={getColumnClass(col.id, "px-2 py-2 border-r border-[#E2E8F0] text-right uppercase bg-[#E2E8F0]")}
+                                                                  >
+                                                                      {isFullName ? 'TỔNG' : ''}
+                                                                  </td>
+                                                              );
+                                                          })}
+                                                          {[
+                                                              { id: 'buoiDinhHinh' },
+                                                              { id: 'buoi1' },
+                                                              { id: 'buoi2' },
+                                                              { id: 'buoi3' },
+                                                              { id: 'buoi4' },
+                                                              { id: 'buoi5' },
+                                                              { id: 'buoi6' }
+                                                          ].map(b => {
+                                                              const nonNgungCvs = sorted.filter(cv => !(cv.studyGroup || '').toLowerCase().includes('ngừng'));
+                                                              const hocCount = nonNgungCvs.filter(cv => course.tracking?.[cv.id]?.[b.id]?.hoc === true).length;
+                                                              const hanhCount = nonNgungCvs.filter(cv => course.tracking?.[cv.id]?.[b.id]?.hanh && course.tracking?.[cv.id]?.[b.id]?.hanh !== '🖤').length;
+                                                              return (
+                                                                  <React.Fragment key={`total-${b.id}`}>
+                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-green-700">{hocCount}</td>
+                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-blue-700">{hanhCount}</td>
+                                                                  </React.Fragment>
+                                                              )
+                                                          })}
+                                                          {(isAdmin && isEditingTracking) && <td className="bg-[#E2E8F0]"></td>}
+                                                      </tr>
+                                                      <tr className="border-b border-[#E2E8F0] font-bold text-slate-700 text-[11px] bg-slate-100">
+                                                          {columnsDef.map(col => {
+                                                              const isFullName = col.id === 'fullName';
+                                                              return (
+                                                                  <td 
+                                                                      key={`ngung-${col.id}`}
+                                                                      style={getColumnStyle(col.id)}
+                                                                      className={getColumnClass(col.id, "px-2 py-2 border-r border-[#E2E8F0] text-right uppercase bg-slate-100")}
+                                                                  >
+                                                                      {isFullName ? 'NGỪNG/HỌC LẠI' : ''}
+                                                                  </td>
+                                                              );
+                                                          })}
+                                                          {[
+                                                              { id: 'buoiDinhHinh' },
+                                                              { id: 'buoi1' },
+                                                              { id: 'buoi2' },
+                                                              { id: 'buoi3' },
+                                                              { id: 'buoi4' },
+                                                              { id: 'buoi5' },
+                                                              { id: 'buoi6' }
+                                                          ].map(b => {
+                                                              return (
+                                                                  <React.Fragment key={`ngung-${b.id}`}>
+                                                                      <td colSpan={2} className="px-1 py-1 border-r border-[#E2E8F0] text-center font-normal bg-slate-100">
+                                                                          {(isAdmin && isEditingTracking) ? (
+                                                                              <input 
+                                                                                  type="text"
+                                                                                  defaultValue={course.tracking?.summaryNgung?.[b.id] || ''}
+                                                                                  onBlur={async (e) => {
+                                                                                      const val = e.target.value.trim();
+                                                                                      if (val !== (course.tracking?.summaryNgung?.[b.id] || '')) {
+                                                                                          const currentTracking = course.tracking || {};
+                                                                                          const summaryNgung = currentTracking.summaryNgung || {};
+                                                                                          const newTracking = {
+                                                                                              ...currentTracking,
+                                                                                              summaryNgung: {
+                                                                                                  ...summaryNgung,
+                                                                                                  [b.id]: val
+                                                                                              }
+                                                                                          };
+                                                                                          try {
+                                                                                              await updateDoc(doc(db, 'courses', course.id), { tracking: newTracking });
+                                                                                          } catch (err) {
+                                                                                              console.error(err);
+                                                                                          }
+                                                                                      }
+                                                                                  }}
+                                                                                  placeholder="0"
+                                                                                  className="w-full text-center text-[10px] bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-purple-500 rounded px-1 py-0.5 outline-none font-bold text-slate-700"
+                                                                              />
+                                                                          ) : (
+                                                                              <span className="font-bold text-slate-700">{course.tracking?.summaryNgung?.[b.id] || ''}</span>
+                                                                          )}
+                                                                      </td>
+                                                                  </React.Fragment>
+                                                              )
+                                                          })}
+                                                          {(isAdmin && isEditingTracking) && <td className="bg-slate-100"></td>}
+                                                      </tr>
+                                                      {ngungMappedRows}
+                                                    </>
+                                                  );
                                                 })()}
                                               </tbody>
                                             </table>
