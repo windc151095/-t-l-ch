@@ -294,6 +294,7 @@ export default function App() {
   const [trackingStampHoc, setTrackingStampHoc] = useState<boolean | null>(true);
   const [trackingStampHanh, setTrackingStampHanh] = useState<string>('⭐');
   const [isEditingTracking, setIsEditingTracking] = useState(false);
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [bulkAssignInput, setBulkAssignInput] = useState('');
   const [newEntityName, setNewEntityName] = useState('');
   const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
@@ -3701,6 +3702,17 @@ export default function App() {
                                                   >
                                                     {isEditingTracking ? 'Lưu chỉnh sửa' : 'Chỉnh sửa'}
                                                   </button>
+                                                  <button
+                                                    onClick={() => setIsTableExpanded(!isTableExpanded)}
+                                                    className={cn(
+                                                      "px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all",
+                                                      isTableExpanded 
+                                                        ? "bg-slate-800 text-white shadow-md" 
+                                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                    )}
+                                                  >
+                                                    {isTableExpanded ? 'Thu nhỏ' : 'Mở rộng'}
+                                                  </button>
                                                   {isEditingTracking && (
                                                     <div className="flex flex-wrap items-center gap-6 bg-slate-50 px-4 py-2 border border-slate-200 rounded-xl">
                                                   <div className="flex items-center gap-3">
@@ -3756,9 +3768,92 @@ export default function App() {
                                                 )}
                                                 </div>
                                               )}
-                                              <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[70vh]">
-                                                <table className="w-full text-sm text-left whitespace-nowrap" style={{ fontFamily: '"Google Sans", sans-serif' }}>
-                                              <thead className="text-[10px] uppercase font-black text-slate-800 text-center sticky top-0 z-10 shadow-sm shadow-slate-200">
+                                              <div className={cn(
+                                                "overflow-x-auto border border-slate-200",
+                                                isTableExpanded ? "fixed inset-0 z-50 bg-white p-4 max-h-screen" : "rounded-xl max-h-[70vh]"
+                                              )}>
+                                                {isTableExpanded && isAdmin && (
+                                                  <div className="flex flex-wrap items-center gap-4 mb-4">
+                                                    <button
+                                                      onClick={() => setIsEditingTracking(!isEditingTracking)}
+                                                      className={cn(
+                                                        "px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all",
+                                                        isEditingTracking 
+                                                          ? "bg-purple-600 text-white shadow-md shadow-purple-200" 
+                                                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                      )}
+                                                    >
+                                                      {isEditingTracking ? 'Lưu chỉnh sửa' : 'Chỉnh sửa'}
+                                                    </button>
+                                                    <button
+                                                      onClick={() => setIsTableExpanded(!isTableExpanded)}
+                                                      className={cn(
+                                                        "px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all",
+                                                        isTableExpanded 
+                                                          ? "bg-slate-800 text-white shadow-md" 
+                                                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                      )}
+                                                    >
+                                                      {isTableExpanded ? 'Thu nhỏ' : 'Mở rộng'}
+                                                    </button>
+                                                    {isEditingTracking && (
+                                                      <div className="flex flex-wrap items-center gap-6 bg-slate-50 px-4 py-2 border border-slate-200 rounded-xl">
+                                                        <div className="flex items-center gap-3">
+                                                          <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">Tem thẻ Học:</span>
+                                                          <div className="flex gap-1.5">
+                                                            {[
+                                                              { value: true, label: '✅' },
+                                                              { value: false, label: '❌' },
+                                                              { value: null, label: 'Trống' }
+                                                            ].map(opt => (
+                                                              <button
+                                                                key={String(opt.value)}
+                                                                onClick={() => setTrackingStampHoc(opt.value)}
+                                                                className={cn(
+                                                                  "px-3 py-1.5 rounded-lg text-sm font-bold border transition-all",
+                                                                  trackingStampHoc === opt.value
+                                                                    ? "bg-white border-blue-400 shadow-sm ring-2 ring-blue-100"
+                                                                    : "bg-transparent border-transparent hover:bg-slate-200 text-slate-500"
+                                                                )}
+                                                              >
+                                                                {opt.label}
+                                                              </button>
+                                                            ))}
+                                                          </div>
+                                                        </div>
+                                                        <div className="w-px h-6 bg-slate-300"></div>
+                                                        <div className="flex items-center gap-3">
+                                                          <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">Tem thẻ Hành:</span>
+                                                          <div className="flex gap-1.5">
+                                                            {[
+                                                              { value: '🖤', label: '🖤' },
+                                                              { value: '⭐', label: '⭐' },
+                                                              { value: '⭐⭐', label: '⭐⭐' },
+                                                              { value: '❤️❤️❤️', label: '❤️❤️❤️' },
+                                                              { value: '', label: 'Trống' }
+                                                            ].map(opt => (
+                                                              <button
+                                                                key={opt.value}
+                                                                onClick={() => setTrackingStampHanh(opt.value)}
+                                                                className={cn(
+                                                                  "px-3 py-1.5 rounded-lg text-sm font-bold border transition-all",
+                                                                  trackingStampHanh === opt.value
+                                                                    ? "bg-white border-purple-400 shadow-sm ring-2 ring-purple-100"
+                                                                    : "bg-transparent border-transparent hover:bg-slate-200 text-slate-500"
+                                                                )}
+                                                              >
+                                                                {opt.label}
+                                                              </button>
+                                                            ))}
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                )}
+                                                <div className={cn("overflow-x-auto", isTableExpanded ? "max-h-[calc(100vh-100px)]" : "max-h-full")}>
+                                                  <table className="w-full text-sm text-left whitespace-nowrap" style={{ fontFamily: '"Google Sans", sans-serif' }}>
+                                              <thead className="text-[10px] uppercase font-black text-slate-800 text-center sticky top-0 z-40 shadow-sm shadow-slate-200">
                                                 <tr>
                                                   <th colSpan={(isAdmin && isEditingTracking) ? 23 : 22} className="py-2 border-b border-r border-[#E2E8F0] bg-[#FFFF00]">DANH SÁCH ĐĂNG KÝ HỌC {course.name}</th>
                                                 </tr>
@@ -3989,6 +4084,7 @@ export default function App() {
                                                 })()}
                                               </tbody>
                                             </table>
+                                          </div>
                                           </div>
                                           </div>
                                         );
