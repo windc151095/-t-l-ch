@@ -246,7 +246,7 @@ export default function App() {
   const [isSubmittingCV, setIsSubmittingCV] = useState(false);
   const [showCVSaveSuccess, setShowCVSaveSuccess] = useState(false);
   const [chromeAlert, setChromeAlert] = useState<string | null>(null);
-  const [trackingFilters, setTrackingFilters] = useState({
+  const [trackingFilters, setTrackingFilters] = useState<Record<string, string>>({
     companion: '',
     studentId: '',
     fullName: '',
@@ -294,6 +294,7 @@ export default function App() {
   const [trackingStampHoc, setTrackingStampHoc] = useState<boolean | null>(true);
   const [trackingStampHanh, setTrackingStampHanh] = useState<string>('⭐');
   const [isEditingTracking, setIsEditingTracking] = useState(false);
+  const [isTrackingFilterVisible, setIsTrackingFilterVisible] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [tableZoom, setTableZoom] = useState(100);
   const [isCustomizingTable, setIsCustomizingTable] = useState(false);
@@ -308,6 +309,7 @@ export default function App() {
     fbLink: { fixed: false, hidden: false }
   });
   const [activeColumnMenu, setActiveColumnMenu] = useState<string | null>(null);
+  const [activeFilterMenu, setActiveFilterMenu] = useState<string | null>(null);
   const [isHeaderFixed, setIsHeaderFixed] = useState(true);
   const [activeTotalMenu, setActiveTotalMenu] = useState<{ lessonId: string, type: 'hoc' | 'hanh' } | null>(null);
 
@@ -320,6 +322,7 @@ export default function App() {
     const handleGlobalClick = () => {
       setActiveColumnMenu(null);
       setActiveTotalMenu(null);
+      setActiveFilterMenu(null);
     };
     document.addEventListener('click', handleGlobalClick);
     return () => document.removeEventListener('click', handleGlobalClick);
@@ -3861,6 +3864,18 @@ export default function App() {
                                                   >
                                                     {isCustomizingTable ? 'Xong tùy chỉnh' : 'Tùy chỉnh cột'}
                                                   </button>
+                                                  <button
+                                                    onClick={() => setIsTrackingFilterVisible(!isTrackingFilterVisible)}
+                                                    className={cn(
+                                                      "px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all gap-2",
+                                                      isTrackingFilterVisible 
+                                                        ? "bg-blue-600 text-white shadow-md shadow-blue-200" 
+                                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                    )}
+                                                  >
+                                                    <SlidersHorizontal size={16} />
+                                                    {isTrackingFilterVisible ? 'Ẩn bộ lọc' : 'Lọc'}
+                                                  </button>
                                                   {Object.values(tableColumnConfig).some(c => c.hidden) && (
                                                     <button
                                                       onClick={() => {
@@ -3982,6 +3997,18 @@ export default function App() {
                                                     >
                                                       {isCustomizingTable ? 'Xong tùy chỉnh' : 'Tùy chỉnh cột'}
                                                     </button>
+                                                    <button
+                                                      onClick={() => setIsTrackingFilterVisible(!isTrackingFilterVisible)}
+                                                      className={cn(
+                                                        "px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center transition-all gap-2",
+                                                        isTrackingFilterVisible 
+                                                          ? "bg-blue-600 text-white shadow-md shadow-blue-200" 
+                                                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                      )}
+                                                    >
+                                                      <SlidersHorizontal size={16} />
+                                                      {isTrackingFilterVisible ? 'Ẩn bộ lọc' : 'Lọc'}
+                                                    </button>
                                                     {Object.values(tableColumnConfig).some(c => c.hidden) && (
                                                       <button
                                                         onClick={() => {
@@ -4073,7 +4100,7 @@ export default function App() {
                                                     rowSpan={2}
                                                   >
                                                     <div className="flex items-center justify-center gap-1">NGƯỜI ĐỒNG HÀNH{renderColumnMenu('companion')}</div>
-                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.companion} onChange={e => setTrackingFilters(f => ({...f, companion: e.target.value}))} />
+                                                    {isTrackingFilterVisible && <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400 normal-case" value={trackingFilters.companion} onChange={e => setTrackingFilters(f => ({...f, companion: e.target.value}))} />}
                                                   </th>
                                                   <th 
                                                     style={getColumnStyle('studentId', true)}
@@ -4081,7 +4108,7 @@ export default function App() {
                                                     rowSpan={2}
                                                   >
                                                     <div className="flex items-center justify-center gap-1">MÃ HỌC VIÊN{renderColumnMenu('studentId')}</div>
-                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.studentId} onChange={e => setTrackingFilters(f => ({...f, studentId: e.target.value}))} />
+                                                    {isTrackingFilterVisible && <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400 normal-case" value={trackingFilters.studentId} onChange={e => setTrackingFilters(f => ({...f, studentId: e.target.value}))} />}
                                                   </th>
                                                   <th 
                                                     style={getColumnStyle('fullName', true)}
@@ -4089,7 +4116,7 @@ export default function App() {
                                                     rowSpan={2}
                                                   >
                                                     <div className="flex items-center justify-center gap-1">HỌ TÊN{renderColumnMenu('fullName')}</div>
-                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.fullName} onChange={e => setTrackingFilters(f => ({...f, fullName: e.target.value}))} />
+                                                    {isTrackingFilterVisible && <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400 normal-case" value={trackingFilters.fullName} onChange={e => setTrackingFilters(f => ({...f, fullName: e.target.value}))} />}
                                                   </th>
                                                   <th 
                                                     style={getColumnStyle('age', true)}
@@ -4097,7 +4124,7 @@ export default function App() {
                                                     rowSpan={2}
                                                   >
                                                     <div className="flex items-center justify-center gap-1">TUỔI{renderColumnMenu('age')}</div>
-                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-10 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.age} onChange={e => setTrackingFilters(f => ({...f, age: e.target.value}))} />
+                                                    {isTrackingFilterVisible && <input type="text" placeholder="Lọc..." className="mt-1 block w-10 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400 normal-case" value={trackingFilters.age} onChange={e => setTrackingFilters(f => ({...f, age: e.target.value}))} />}
                                                   </th>
                                                   <th 
                                                     style={getColumnStyle('guideName', true)}
@@ -4105,7 +4132,7 @@ export default function App() {
                                                     rowSpan={2}
                                                   >
                                                     <div className="flex items-center justify-center gap-1">HDV{renderColumnMenu('guideName')}</div>
-                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.guideName} onChange={e => setTrackingFilters(f => ({...f, guideName: e.target.value}))} />
+                                                    {isTrackingFilterVisible && <input type="text" placeholder="Lọc..." className="mt-1 block w-16 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400 normal-case" value={trackingFilters.guideName} onChange={e => setTrackingFilters(f => ({...f, guideName: e.target.value}))} />}
                                                   </th>
                                                   <th 
                                                     style={getColumnStyle('studyGroup', true)}
@@ -4113,7 +4140,7 @@ export default function App() {
                                                     rowSpan={2}
                                                   >
                                                     <div className="flex items-center justify-center gap-1">GROUP HỌC TẬP{renderColumnMenu('studyGroup')}</div>
-                                                    <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400" value={trackingFilters.studyGroup} onChange={e => setTrackingFilters(f => ({...f, studyGroup: e.target.value}))} />
+                                                    {isTrackingFilterVisible && <input type="text" placeholder="Lọc..." className="mt-1 block w-20 text-[8px] px-1 py-0.5 text-black rounded border border-slate-300 font-normal m-auto outline-none focus:border-blue-400 normal-case" value={trackingFilters.studyGroup} onChange={e => setTrackingFilters(f => ({...f, studyGroup: e.target.value}))} />}
                                                   </th>
                                                   <th 
                                                     style={getColumnStyle('fbLink', true)}
@@ -4138,16 +4165,90 @@ export default function App() {
                                                   {(isAdmin && isEditingTracking) && <th rowSpan={2} className="px-2 py-1 border-r border-[#E2E8F0] bg-red-100 text-red-600 align-middle">XÓA</th>}
                                                 </tr>
                                                 <tr>
-                                                  {[1,2,3,4,5,6,7].map(i => (
-                                                    <React.Fragment key={i}>
-                                                      <th className="px-2 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">HỌC</th>
-                                                      <th className="px-2 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">HÀNH</th>
-                                                    </React.Fragment>
-                                                  ))}
+                                                  {[
+                                                    { id: 'buoiDinhHinh' },
+                                                    { id: 'buoi1' },
+                                                    { id: 'buoi2' },
+                                                    { id: 'buoi3' },
+                                                    { id: 'buoi4' },
+                                                    { id: 'buoi5' },
+                                                    { id: 'buoi6' }
+                                                  ].map(b => {
+                                                    const renderHocHanhFilterMenu = (bId: string, type: 'hoc' | 'hanh') => {
+                                                      if (!isTrackingFilterVisible) return null;
+                                                      const filterKey = `${bId}_${type}`;
+                                                      const options = type === 'hoc' ? ['✅', '❌', 'Trống'] : ['🖤', '⭐', '⭐⭐', '❤️❤️❤️', 'Trống'];
+                                                      const selectedVals: string[] = Array.isArray(trackingFilters[filterKey]) ? trackingFilters[filterKey] : [];
+                                                      const isActive = activeFilterMenu === filterKey;
+                                                      
+                                                      return (
+                                                        <div className="relative mt-1">
+                                                          <button 
+                                                            onClick={(e) => { e.stopPropagation(); setActiveFilterMenu(isActive ? null : filterKey); }}
+                                                            className={cn("bg-white border rounded px-1.5 py-0.5 text-[8px] text-slate-600 flex items-center justify-between min-w-[32px] m-auto normal-case hover:border-blue-400 font-normal", selectedVals.length > 0 ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-300")}
+                                                          >
+                                                            {selectedVals.length > 0 ? `Lọc(${selectedVals.length})` : 'Lọc...'}
+                                                          </button>
+                                                          {isActive && (
+                                                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 w-[100px] bg-white border border-slate-200 rounded-lg shadow-xl z-[90] py-1 text-left font-normal normal-case text-[10px] font-sans">
+                                                              <div className="flex flex-col max-h-48 overflow-y-auto hide-scrollbar">
+                                                                {options.map(opt => (
+                                                                  <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer">
+                                                                    <input 
+                                                                      type="checkbox" 
+                                                                      checked={selectedVals.includes(opt)}
+                                                                      onChange={(e) => {
+                                                                        const checked = e.target.checked;
+                                                                        setTrackingFilters(f => {
+                                                                           const current = Array.isArray(f[filterKey]) ? f[filterKey] : [];
+                                                                           const newArr = checked ? [...current, opt] : current.filter(x => x !== opt);
+                                                                           return {...f, [filterKey]: newArr};
+                                                                        });
+                                                                      }}
+                                                                      className="rounded border-slate-300"
+                                                                    />
+                                                                    <span>{opt}</span>
+                                                                  </label>
+                                                                ))}
+                                                              </div>
+                                                              {selectedVals.length > 0 && (
+                                                                <div className="px-2 pt-1 border-t border-slate-100 mt-1">
+                                                                  <button 
+                                                                    onClick={() => setTrackingFilters(f => ({...f, [filterKey]: []}))}
+                                                                    className="text-red-500 hover:text-red-600 font-bold block w-full text-center py-1"
+                                                                  >
+                                                                    Xóa lọc
+                                                                  </button>
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    };
+
+                                                    return (
+                                                      <React.Fragment key={b.id}>
+                                                        <th className="px-1 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">
+                                                          <div className="flex flex-col items-center gap-1 font-bold">
+                                                            <span>HỌC</span>
+                                                            {renderHocHanhFilterMenu(b.id, 'hoc')}
+                                                          </div>
+                                                        </th>
+                                                        <th className="px-1 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">
+                                                          <div className="flex flex-col items-center gap-1 font-bold">
+                                                            <span>HÀNH</span>
+                                                            {renderHocHanhFilterMenu(b.id, 'hanh')}
+                                                          </div>
+                                                        </th>
+                                                      </React.Fragment>
+                                                    );
+                                                  })}
                                                 </tr>
                                               </thead>
                                               <tbody className="text-[10px]">
                                                 {(() => {
+                                                  const sessionsIds = ['buoiDinhHinh', 'buoi1', 'buoi2', 'buoi3', 'buoi4', 'buoi5', 'buoi6'];
                                                   const sorted = [...searchedCvs].filter(cv => {
                                                     if (trackingFilters.companion && !(cv.companion || '').toLowerCase().includes(trackingFilters.companion.toLowerCase())) return false;
                                                     if (trackingFilters.studentId && !(cv.studentId || '').toLowerCase().includes(trackingFilters.studentId.toLowerCase())) return false;
@@ -4155,6 +4256,23 @@ export default function App() {
                                                     if (trackingFilters.age && !(cv.age || '').toLowerCase().includes(trackingFilters.age.toLowerCase())) return false;
                                                     if (trackingFilters.guideName && !(cv.guideName || '').toLowerCase().includes(trackingFilters.guideName.toLowerCase())) return false;
                                                     if (trackingFilters.studyGroup && !(cv.studyGroup || '').toLowerCase().includes(trackingFilters.studyGroup.toLowerCase())) return false;
+                                                    
+                                                    const track = course.tracking?.[cv.id] || {};
+                                                    for (const sId of sessionsIds) {
+                                                      const fHoc = trackingFilters[`${sId}_hoc`];
+                                                      if (fHoc) {
+                                                        const hocVal = track[sId]?.hoc;
+                                                        const strVal = hocVal === true ? '✅' : hocVal === false ? '❌' : '';
+                                                        const vLower = fHoc.toLowerCase();
+                                                        if (!strVal.includes(vLower) && !(vLower === 'v' && hocVal === true) && !(vLower === 'x' && hocVal === false)) return false;
+                                                      }
+                                                      const fHanh = trackingFilters[`${sId}_hanh`];
+                                                      if (fHanh) {
+                                                        const strHanh = track[sId]?.hanh || '';
+                                                        if (!strHanh.toLowerCase().includes(fHanh.toLowerCase())) return false;
+                                                      }
+                                                    }
+
                                                     return true;
                                                   }).sort((a,b) => {
                                                     const isNgungA = (a.studyGroup || '').toLowerCase().includes('ngừng');
