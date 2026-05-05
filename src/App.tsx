@@ -3424,15 +3424,21 @@ export default function App() {
                                             <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-purple-100">
                                               Tổng: {enrolledCvs.length} Học viên
                                             </div>
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex flex-wrap items-center gap-3">
                                               <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest flex items-center gap-1">
                                                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                                                {enrolledCvs.filter(c => c.type !== 'reenroll').length} Mới
+                                                {enrolledCvs.filter(c => c.type !== 'reenroll' && !(c.studyGroup || '').toLowerCase().includes('ngừng')).length} Mới
                                               </span>
                                               <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest flex items-center gap-1">
                                                 <div className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
-                                                {enrolledCvs.filter(c => c.type === 'reenroll').length} Học lại
+                                                {enrolledCvs.filter(c => c.type === 'reenroll' && !(c.studyGroup || '').toLowerCase().includes('ngừng')).length} Học lại
                                               </span>
+                                              {enrolledCvs.filter(c => (c.studyGroup || '').toLowerCase().includes('ngừng')).length > 0 && (
+                                                <span className="text-[10px] font-bold text-rose-600 uppercase tracking-widest flex items-center gap-1">
+                                                  <div className="w-1.5 h-1.5 bg-rose-500 rounded-full" />
+                                                  {enrolledCvs.filter(c => (c.studyGroup || '').toLowerCase().includes('ngừng')).length} Ngừng/Học lại
+                                                </span>
+                                              )}
                                             </div>
                                           </div>
                                         </div>
@@ -3722,7 +3728,7 @@ export default function App() {
                                             const maxPossibleLessons = studentsInGroup.length * 7;
                                             return {
                                               name: group,
-                                              hocRate: maxPossibleLessons ? (totalLessons / maxPossibleLessons) * 100 : 0,
+                                              hocRate: maxPossibleLessons ? Number(((totalLessons / maxPossibleLessons) * 100).toFixed(1)) : 0,
                                               stars: totalStars,
                                               studentCount: studentsInGroup.length
                                             };
@@ -3735,11 +3741,55 @@ export default function App() {
                                             const maxPossibleLessons = students.length * 7;
                                             return {
                                               name: comp,
-                                              hocRate: maxPossibleLessons ? (totalLessons / maxPossibleLessons) * 100 : 0,
+                                              hocRate: maxPossibleLessons ? Number(((totalLessons / maxPossibleLessons) * 100).toFixed(1)) : 0,
                                               stars: totalStars,
                                               studentCount: students.length
                                             };
                                           }).sort((a, b) => b.hocRate - a.hocRate);
+                                          
+                                          const sessionNames = [
+                                            { id: 'buoiDinhHinh', label: 'B.Định Hình' },
+                                            { id: 'buoi1', label: 'Buổi 1' },
+                                            { id: 'buoi2', label: 'Buổi 2' },
+                                            { id: 'buoi3', label: 'Buổi 3' },
+                                            { id: 'buoi4', label: 'Buổi 4' },
+                                            { id: 'buoi5', label: 'Buổi 5' },
+                                            { id: 'buoi6', label: 'Buổi 6' }
+                                          ];
+                                          const totalStudents = sortedForAnalytics.length;
+                                          const sessionStats = sessionNames.map(s => {
+                                            let hocCompleted = 0;
+                                            let hanhSubmitted = 0;
+                                            sortedForAnalytics.forEach(cv => {
+                                              const track = course.tracking?.[cv.id]?.[s.id];
+                                              if (track?.hoc) hocCompleted++;
+                                              const hanh = track?.hanh;
+                                              if (hanh && ['⭐', '⭐⭐', '❤️❤️❤️'].includes(hanh)) hanhSubmitted++;
+                                            });
+                                            return {
+                                              name: s.label,
+                                              hocRate: totalStudents > 0 ? Number(((hocCompleted / totalStudents) * 100).toFixed(1)) : 0,
+                                              hanhRate: totalStudents > 0 ? Number(((hanhSubmitted / totalStudents) * 100).toFixed(1)) : 0,
+                                              hocCompleted,
+                                              hanhSubmitted
+                                            };
+                                          });
+
+                                          const ageGroups = sortedForAnalytics.reduce((acc, cv) => {
+                                            const age = cv.age || 'Chưa rõ';
+                                            acc[age] = (acc[age] || 0) + 1;
+                                            return acc;
+                                          }, {} as Record<string, number>);
+                                          const ageStats = Object.entries(ageGroups).map(([name, value]) => ({ name, value: Number(value) })).sort((a, b) => b.value - a.value);
+
+                                          const jobGroups = sortedForAnalytics.reduce((acc, cv) => {
+                                            const job = cv.job || 'Chưa rõ';
+                                            acc[job] = (acc[job] || 0) + 1;
+                                            return acc;
+                                          }, {} as Record<string, number>);
+                                          const jobStats = Object.entries(jobGroups).map(([name, value]) => ({ name, value: Number(value) })).sort((a, b) => b.value - a.value);
+
+                                          const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#64748b', '#14b8a6', '#84cc16'];
 
                                           return (
                                             <div className="flex flex-col gap-8">
@@ -3815,38 +3865,111 @@ export default function App() {
                                               )}
 
                                               <div className="flex flex-col gap-2">
-                                                <h3 className="font-bold text-lg text-slate-800">Hiệu suất theo Group học tập</h3>
-                                                <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50">
+                                                <h3 className="font-bold text-lg text-slate-800">Tiến độ theo từng Buổi (Học & Hành)</h3>
+                                                <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50 mb-6">
                                                   <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart data={groupStats}>
+                                                    <BarChart data={sessionStats}>
                                                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                                                       <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
-                                                      <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                                                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                      <YAxis tick={{ fontSize: 10 }} stroke="#94A3B8" domain={[0, 100]} />
                                                       <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                                                       <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
-                                                      <Bar yAxisId="left" dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                                                      <Bar yAxisId="right" dataKey="stars" name="Tổng Hành (Tim/Sao)" fill="#fbbf24" radius={[4, 4, 0, 0]} />
+                                                      <Bar dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30} />
+                                                      <Bar dataKey="hanhRate" name="Tỷ lệ Hành (%)" fill="#ec4899" radius={[4, 4, 0, 0]} barSize={30} />
                                                     </BarChart>
                                                   </ResponsiveContainer>
                                                 </div>
                                               </div>
 
-                                              <div className="flex flex-col gap-2">
-                                                <h3 className="font-bold text-lg text-slate-800">Hiệu suất theo Người đồng hành</h3>
-                                                <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50">
-                                                  <ResponsiveContainer width="100%" height="100%">
-                                                    <BarChart data={companionStats}>
-                                                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                                                      <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
-                                                      <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                                                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                                                      <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                                                      <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
-                                                      <Bar yAxisId="left" dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                                      <Bar yAxisId="right" dataKey="stars" name="Tổng Hành (Tim/Sao)" fill="#fbbf24" radius={[4, 4, 0, 0]} />
-                                                    </BarChart>
-                                                  </ResponsiveContainer>
+                                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                                <div className="flex flex-col gap-2">
+                                                  <h3 className="font-bold text-lg text-slate-800">Hiệu suất theo Group học tập</h3>
+                                                  <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                      <BarChart data={groupStats}>
+                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                                        <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
+                                                        <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                                        <Bar yAxisId="left" dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={20} />
+                                                        <Bar yAxisId="right" dataKey="stars" name="Tổng Hành (Tim/Sao)" fill="#fbbf24" radius={[4, 4, 0, 0]} barSize={20} />
+                                                      </BarChart>
+                                                    </ResponsiveContainer>
+                                                  </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-2">
+                                                  <h3 className="font-bold text-lg text-slate-800">Hiệu suất theo Người đồng hành</h3>
+                                                  <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                      <BarChart data={companionStats}>
+                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                                        <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
+                                                        <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#94A3B8" />
+                                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                                        <Bar yAxisId="left" dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+                                                        <Bar yAxisId="right" dataKey="stars" name="Tổng Hành (Tim/Sao)" fill="#fbbf24" radius={[4, 4, 0, 0]} barSize={20} />
+                                                      </BarChart>
+                                                    </ResponsiveContainer>
+                                                  </div>
+                                                </div>
+                                              </div>
+
+                                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mt-4">
+                                                <div className="flex flex-col gap-2">
+                                                  <h3 className="font-bold text-lg text-slate-800">Phân bố Nghề nghiệp</h3>
+                                                  <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50 flex justify-center items-center">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                      <PieChart>
+                                                        <Pie
+                                                          data={jobStats}
+                                                          cx="50%"
+                                                          cy="50%"
+                                                          outerRadius={80}
+                                                          fill="#8884d8"
+                                                          dataKey="value"
+                                                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                                          labelLine={true}
+                                                        >
+                                                          {jobStats.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                          ))}
+                                                        </Pie>
+                                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                                      </PieChart>
+                                                    </ResponsiveContainer>
+                                                  </div>
+                                                </div>
+
+                                                <div className="flex flex-col gap-2">
+                                                  <h3 className="font-bold text-lg text-slate-800">Phân bố Độ tuổi</h3>
+                                                  <div className="h-[300px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50 flex justify-center items-center">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                      <PieChart>
+                                                        <Pie
+                                                          data={ageStats}
+                                                          cx="50%"
+                                                          cy="50%"
+                                                          outerRadius={80}
+                                                          fill="#8884d8"
+                                                          dataKey="value"
+                                                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                                          labelLine={true}
+                                                        >
+                                                          {ageStats.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                          ))}
+                                                        </Pie>
+                                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                                      </PieChart>
+                                                    </ResponsiveContainer>
+                                                  </div>
                                                 </div>
                                               </div>
                                             </div>
@@ -3912,7 +4035,7 @@ export default function App() {
                                                     <SlidersHorizontal size={16} />
                                                     {isTrackingFilterVisible ? 'Ẩn bộ lọc' : 'Lọc'}
                                                   </button>
-                                                  {Object.values(tableColumnConfig).some(c => c.hidden) && (
+                                                  {Object.values(tableColumnConfig).some((c: any) => c.hidden) && (
                                                     <button
                                                       onClick={() => {
                                                         setTableColumnConfig(prev => {
@@ -4045,7 +4168,7 @@ export default function App() {
                                                       <SlidersHorizontal size={16} />
                                                       {isTrackingFilterVisible ? 'Ẩn bộ lọc' : 'Lọc'}
                                                     </button>
-                                                    {Object.values(tableColumnConfig).some(c => c.hidden) && (
+                                                    {Object.values(tableColumnConfig).some((c: any) => c.hidden) && (
                                                       <button
                                                         onClick={() => {
                                                           setTableColumnConfig(prev => {
