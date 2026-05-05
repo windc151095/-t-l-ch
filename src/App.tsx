@@ -63,6 +63,8 @@ import {
   Play,
   Check,
   X,
+  Smile,
+  XCircle,
   FileText,
   Download,
   Search,
@@ -7200,7 +7202,7 @@ export default function App() {
                                                                     value: true,
                                                                     label: (
                                                                       <div className="relative">
-                                                                        <Clock size={20} className="text-amber-600" />
+                                                                        <Smile size={20} className="text-amber-600" />
                                                                         <Check size={10} className="absolute -top-0.5 -right-0.5 text-green-600 font-black stroke-[4] drop-shadow-sm" />
                                                                       </div>
                                                                     ),
@@ -7208,9 +7210,7 @@ export default function App() {
                                                                   {
                                                                     value: false,
                                                                     label: (
-                                                                      <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center">
-                                                                        <Clock size={12} className="text-slate-400" />
-                                                                      </div>
+                                                                      <XCircle size={20} className="text-red-500" />
                                                                     ),
                                                                   },
                                                                   {
@@ -7806,7 +7806,7 @@ export default function App() {
                                                                 <th className="px-1 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">
                                                                   <div className="flex flex-col items-center gap-1 font-bold">
                                                                     <div className="relative">
-                                                                      <Clock size={18} className="text-amber-600" />
+                                                                      <Smile size={18} className="text-amber-600" />
                                                                       <Check
                                                                         size={8}
                                                                         className="absolute -top-0.5 -right-0.5 text-green-600 font-black stroke-[4] drop-shadow-sm"
@@ -8584,18 +8584,21 @@ export default function App() {
                                                                           >
                                                                             {track[b.id]?.timely === true || track[b.id]?.timely === false ? (
                                                                               <div className="relative">
-                                                                                <Clock
-                                                                                  size={16}
-                                                                                  className={
-                                                                                    track[b.id]?.timely === true
-                                                                                      ? "text-amber-600"
-                                                                                      : "text-slate-400"
-                                                                                  }
-                                                                                />
-                                                                                {track[b.id]?.timely === true && (
-                                                                                  <Check
-                                                                                    size={10}
-                                                                                    className="absolute -top-1 -right-1 text-green-600 font-black stroke-[4] drop-shadow-sm"
+                                                                                {track[b.id]?.timely === true ? (
+                                                                                  <>
+                                                                                    <Smile
+                                                                                      size={16}
+                                                                                      className="text-amber-600"
+                                                                                    />
+                                                                                    <Check
+                                                                                      size={10}
+                                                                                      className="absolute -top-1 -right-1 text-green-600 font-black stroke-[4] drop-shadow-sm"
+                                                                                    />
+                                                                                  </>
+                                                                                ) : (
+                                                                                  <XCircle
+                                                                                    size={16}
+                                                                                    className="text-red-500"
                                                                                   />
                                                                                 )}
                                                                               </div>
@@ -8607,18 +8610,21 @@ export default function App() {
                                                                           <div className="flex justify-center items-center py-1">
                                                                             {track[b.id]?.timely === true || track[b.id]?.timely === false ? (
                                                                               <div className="relative">
-                                                                                <Clock
-                                                                                  size={16}
-                                                                                  className={
-                                                                                    track[b.id]?.timely === true
-                                                                                      ? "text-amber-600"
-                                                                                      : "text-slate-400"
-                                                                                  }
-                                                                                />
-                                                                                {track[b.id]?.timely === true && (
-                                                                                  <Check
-                                                                                    size={10}
-                                                                                    className="absolute -top-1 -right-1 text-green-600 font-black stroke-[4] drop-shadow-sm"
+                                                                                {track[b.id]?.timely === true ? (
+                                                                                  <>
+                                                                                    <Smile
+                                                                                      size={16}
+                                                                                      className="text-amber-600"
+                                                                                    />
+                                                                                    <Check
+                                                                                      size={10}
+                                                                                      className="absolute -top-1 -right-1 text-green-600 font-black stroke-[4] drop-shadow-sm"
+                                                                                    />
+                                                                                  </>
+                                                                                ) : (
+                                                                                  <XCircle
+                                                                                    size={16}
+                                                                                    className="text-red-500"
                                                                                   />
                                                                                 )}
                                                                               </div>
