@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, LineChart, Line
 } from 'recharts';
 import { 
   format, 
@@ -288,6 +288,8 @@ export default function App() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [courseSearchText, setCourseSearchText] = useState('');
+  const [adminCvSearchText, setAdminCvSearchText] = useState('');
+  const [isAdminCvSearchVisible, setIsAdminCvSearchVisible] = useState(false);
   const [courseDetailTab, setCourseDetailTab] = useState<'companion' | 'group' | 'tracking' | 'analytics'>('companion');
   const [assignFilter, setAssignFilter] = useState<string>('all');
   const [selectedStudentIdsForAssign, setSelectedStudentIdsForAssign] = useState<string[]>([]);
@@ -1402,7 +1404,16 @@ export default function App() {
   };
 
   const getFilteredCVs = () => {
-    return cvs.filter(c => {
+    let filtered = cvs;
+    if (adminCvSearchText.trim() !== '') {
+      const searchTerms = adminCvSearchText.toLowerCase().trim().split(' ');
+      filtered = filtered.filter(c => {
+        const textToSearch = `${c.fullName || ''} ${c.phone || ''} ${c.studentId || ''} ${c.companion || ''}`.toLowerCase();
+        return searchTerms.every(term => textToSearch.includes(term));
+      });
+    }
+
+    return filtered.filter(c => {
       if (adminCvTab === 'learning') return true;
       
       // Tab filtering
@@ -2878,6 +2889,39 @@ export default function App() {
                                   <Plus size={18} strokeWidth={2.5} />
                                 </button>
                               )}
+                              {/* Search Inline */}
+                              <div className="relative flex items-center">
+                                <AnimatePresence>
+                                  {isAdminCvSearchVisible && (
+                                    <motion.input
+                                      initial={{ width: 0, opacity: 0 }}
+                                      animate={{ width: 220, opacity: 1 }}
+                                      exit={{ width: 0, opacity: 0 }}
+                                      type="text"
+                                      placeholder="Tìm tên, SĐT, Đồng hành..."
+                                      value={adminCvSearchText}
+                                      onChange={(e) => setAdminCvSearchText(e.target.value)}
+                                      className="absolute right-[calc(100%+8px)] top-0 h-full border border-slate-200 rounded-xl px-3 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 text-sm font-bold text-slate-800 placeholder:font-normal placeholder:text-slate-400 bg-white"
+                                    />
+                                  )}
+                                </AnimatePresence>
+                                <button
+                                  onClick={() => {
+                                    setIsAdminCvSearchVisible(!isAdminCvSearchVisible);
+                                    if (isAdminCvSearchVisible) setAdminCvSearchText('');
+                                  }}
+                                  className={cn(
+                                    "flex items-center justify-center p-2.5 border rounded-xl transition-all shadow-sm focus:outline-none focus:ring-2 relative z-10",
+                                    isAdminCvSearchVisible 
+                                      ? "bg-blue-600 text-white border-blue-600 focus:ring-blue-200"
+                                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50 focus:ring-slate-100"
+                                  )}
+                                  title="Tìm kiếm CV"
+                                >
+                                  <Search size={18} strokeWidth={2.5} />
+                                </button>
+                              </div>
+
                               {/* Export Dropdown */}
                               <div className="relative">
                                 <button 
@@ -3756,6 +3800,22 @@ export default function App() {
                                             { id: 'buoi5', label: 'Buổi 5' },
                                             { id: 'buoi6', label: 'Buổi 6' }
                                           ];
+
+                                          const hdvListForChart = Array.from(new Set(sortedForAnalytics.map(c => String(c.guideName || 'Chưa rõ'))));
+                                          const hdvProgressStats = sessionNames.map(s => {
+                                            const result: any = { name: s.label };
+                                            hdvListForChart.forEach((hdv: string) => {
+                                              const students = sortedForAnalytics.filter(c => String(c.guideName || 'Chưa rõ') === hdv);
+                                              let hocCompleted = 0;
+                                              students.forEach(cv => {
+                                                const track = course.tracking?.[cv.id]?.[s.id];
+                                                if (track?.hoc) hocCompleted++;
+                                              });
+                                              result[hdv] = students.length > 0 ? Number(((hocCompleted / students.length) * 100).toFixed(1)) : 0;
+                                            });
+                                            return result;
+                                          });
+
                                           const totalStudents = sortedForAnalytics.length;
                                           const sessionStats = sessionNames.map(s => {
                                             let hocCompleted = 0;
@@ -3775,12 +3835,46 @@ export default function App() {
                                             };
                                           });
 
+                                          const getAgeBucket = (ageInput: string | number | undefined): string => {
+                                            if (!ageInput) return 'Chưa rõ';
+                                            let age = Number(ageInput);
+                                            if (isNaN(age)) {
+                                              const match = String(ageInput).match(/\d+/);
+                                              if (match) {
+                                                age = Number(match[0]);
+                                              } else {
+                                                return 'Chưa rõ';
+                                              }
+                                            }
+                                            if (age > 1900 && age <= new Date().getFullYear()) {
+                                              age = new Date().getFullYear() - age;
+                                            }
+                                            if (age < 18) return 'Dưới 18';
+                                            if (age >= 18 && age < 30) return '18 - 30';
+                                            if (age >= 30 && age < 35) return '30 - dưới 35';
+                                            if (age >= 35 && age < 45) return '35 - dưới 45';
+                                            if (age >= 45 && age < 60) return '45 - dưới 60';
+                                            if (age >= 60) return 'Trên 60';
+                                            return 'Chưa rõ';
+                                          };
+
                                           const ageGroups = sortedForAnalytics.reduce((acc, cv) => {
-                                            const age = cv.age || 'Chưa rõ';
-                                            acc[age] = (acc[age] || 0) + 1;
+                                            const bucket = getAgeBucket(cv.age);
+                                            acc[bucket] = (acc[bucket] || 0) + 1;
                                             return acc;
                                           }, {} as Record<string, number>);
-                                          const ageStats = Object.entries(ageGroups).map(([name, value]) => ({ name, value: Number(value) })).sort((a, b) => b.value - a.value);
+                                          
+                                          const ageOrder = ['Dưới 18', '18 - 30', '30 - dưới 35', '35 - dưới 45', '45 - dưới 60', 'Trên 60', 'Chưa rõ'];
+                                          const ageStats = Object.entries(ageGroups)
+                                            .map(([name, value]) => ({ name, value: Number(value) }))
+                                            .sort((a, b) => {
+                                              const idxA = ageOrder.indexOf(a.name);
+                                              const idxB = ageOrder.indexOf(b.name);
+                                              if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                                              if (idxA !== -1) return -1;
+                                              if (idxB !== -1) return 1;
+                                              return b.value - a.value;
+                                            });
 
                                           const jobGroups = sortedForAnalytics.reduce((acc, cv) => {
                                             const job = cv.job || 'Chưa rõ';
@@ -3872,11 +3966,37 @@ export default function App() {
                                                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                                                       <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
                                                       <YAxis tick={{ fontSize: 10 }} stroke="#94A3B8" domain={[0, 100]} />
-                                                      <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                      <RechartsTooltip wrapperStyle={{ zIndex: 1000 }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.98)' }} />
                                                       <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
                                                       <Bar dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30} />
                                                       <Bar dataKey="hanhRate" name="Tỷ lệ Hành (%)" fill="#ec4899" radius={[4, 4, 0, 0]} barSize={30} />
                                                     </BarChart>
+                                                  </ResponsiveContainer>
+                                                </div>
+                                              </div>
+
+                                              <div className="flex flex-col gap-2">
+                                                <h3 className="font-bold text-lg text-slate-800">Tiến độ học tập theo HDV (Tỷ lệ Học %)</h3>
+                                                <div className="h-[400px] w-full border border-slate-200 rounded-xl p-4 bg-slate-50 mb-6">
+                                                  <ResponsiveContainer width="100%" height="100%">
+                                                    <LineChart data={hdvProgressStats}>
+                                                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                                      <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
+                                                      <YAxis tick={{ fontSize: 10 }} stroke="#94A3B8" domain={[0, 100]} />
+                                                      <RechartsTooltip wrapperStyle={{ zIndex: 1000 }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.98)' }} />
+                                                      <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                                                      {hdvListForChart.map((hdv: string, index: number) => (
+                                                        <Line
+                                                          key={hdv}
+                                                          type="monotone"
+                                                          dataKey={hdv}
+                                                          stroke={COLORS[index % COLORS.length]}
+                                                          strokeWidth={2}
+                                                          dot={{ r: 4, strokeWidth: 2 }}
+                                                          activeDot={{ r: 6 }}
+                                                        />
+                                                      ))}
+                                                    </LineChart>
                                                   </ResponsiveContainer>
                                                 </div>
                                               </div>
@@ -3891,7 +4011,7 @@ export default function App() {
                                                         <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
                                                         <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#94A3B8" />
                                                         <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <RechartsTooltip wrapperStyle={{ zIndex: 1000 }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.98)' }} />
                                                         <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
                                                         <Bar yAxisId="left" dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={20} />
                                                         <Bar yAxisId="right" dataKey="stars" name="Tổng Hành (Tim/Sao)" fill="#fbbf24" radius={[4, 4, 0, 0]} barSize={20} />
@@ -3909,7 +4029,7 @@ export default function App() {
                                                         <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} stroke="#94A3B8" />
                                                         <YAxis yAxisId="left" tick={{ fontSize: 10 }} stroke="#94A3B8" />
                                                         <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} stroke="#94A3B8" />
-                                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <RechartsTooltip wrapperStyle={{ zIndex: 1000 }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.98)' }} />
                                                         <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
                                                         <Bar yAxisId="left" dataKey="hocRate" name="Tỷ lệ Học (%)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
                                                         <Bar yAxisId="right" dataKey="stars" name="Tổng Hành (Tim/Sao)" fill="#fbbf24" radius={[4, 4, 0, 0]} barSize={20} />
@@ -3939,7 +4059,7 @@ export default function App() {
                                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                           ))}
                                                         </Pie>
-                                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <RechartsTooltip wrapperStyle={{ zIndex: 1000 }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.98)' }} />
                                                         <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
                                                       </PieChart>
                                                     </ResponsiveContainer>
@@ -3965,7 +4085,7 @@ export default function App() {
                                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                                           ))}
                                                         </Pie>
-                                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                                        <RechartsTooltip wrapperStyle={{ zIndex: 1000 }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', backgroundColor: 'rgba(255, 255, 255, 0.98)' }} />
                                                         <Legend wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
                                                       </PieChart>
                                                     </ResponsiveContainer>
