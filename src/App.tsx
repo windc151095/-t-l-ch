@@ -64,7 +64,7 @@ import {
   Check,
   X,
   Smile,
-  XCircle,
+  Frown,
   FileText,
   Download,
   Search,
@@ -1791,21 +1791,22 @@ export default function App() {
     const { utils, writeFile } = await import("xlsx");
 
     let filteredData = cvs;
+    
+    // Always exclude re-enroll CVs for these exports as requested
+    filteredData = filteredData.filter(c => c.type !== "reenroll");
+
     if (adminCvTab === "learning") {
-      // In learning tab, filter by date range if applicable, else raw data
-      // For simplicity, we just use the selected courses cvs or all cvs in learning tab if none selected
-      // Wait, we can reuse getFilteredCVs here, actually exportCVsToExcel uses raw cvs and filters based on filterType
-      // Let's stick to the raw cvs like before, but just format differently.
+      // ... existing learning filter if any ...
     }
     let filenameSuffix = "TatCa";
     let sheetName = "Tất cả";
 
     if (filterType === "completed") {
-      filteredData = cvs.filter(cvFilterMapping.completed);
+      filteredData = filteredData.filter(cvFilterMapping.completed);
       filenameSuffix = "DaHoanThanh";
       sheetName = "Đã hoàn thành";
     } else if (filterType === "rejected") {
-      filteredData = cvs.filter(cvFilterMapping.rejected);
+      filteredData = filteredData.filter(cvFilterMapping.rejected);
       filenameSuffix = "TuChoi";
       sheetName = "Từ chối";
     }
@@ -1854,6 +1855,16 @@ export default function App() {
               "dd/MM/yyyy HH:mm",
             )
           : "",
+        "Ngày giờ duyệt": cv.processedAt
+          ? format(
+              cv.processedAt.toDate
+                ? cv.processedAt.toDate()
+                : typeof cv.processedAt === "number"
+                  ? new Date(cv.processedAt)
+                  : new Date(cv.processedAt),
+              "dd/MM/yyyy HH:mm",
+            )
+          : "Chưa duyệt",
         "Người đồng hành": cv.companion || "",
         "Mã học viên": cv.studentId || "",
         "Họ tên": cv.fullName,
@@ -1865,6 +1876,16 @@ export default function App() {
       worksheetData = filteredData.map((cv, index) => ({
         STT: index + 1,
         "Người duyệt": cv.processedBy || "Chưa duyệt",
+        "Ngày giờ duyệt": cv.processedAt
+          ? format(
+              cv.processedAt.toDate
+                ? cv.processedAt.toDate()
+                : typeof cv.processedAt === "number"
+                  ? new Date(cv.processedAt)
+                  : new Date(cv.processedAt),
+              "dd/MM/yyyy HH:mm",
+            )
+          : "Chưa duyệt",
         "Ngày tạo CV": cv.createdAt
           ? format(
               cv.createdAt.toDate
@@ -5333,7 +5354,9 @@ export default function App() {
                                             ]);
 
                                             // Data Rows
-                                            sorted.forEach((cv, idx) => {
+                                            sorted
+                                              .filter((c) => c.type !== "reenroll")
+                                              .forEach((cv, idx) => {
                                               const track =
                                                 course.tracking?.[cv.id] || {};
                                               const rowData = [
@@ -7207,10 +7230,10 @@ export default function App() {
                                                                       </div>
                                                                     ),
                                                                   },
-                                                                  {
+                                                                    {
                                                                     value: false,
                                                                     label: (
-                                                                      <XCircle size={20} className="text-red-500" />
+                                                                      <Frown size={20} className="text-red-500" />
                                                                     ),
                                                                   },
                                                                   {
@@ -8596,7 +8619,7 @@ export default function App() {
                                                                                     />
                                                                                   </>
                                                                                 ) : (
-                                                                                  <XCircle
+                                                                                  <Frown
                                                                                     size={16}
                                                                                     className="text-red-500"
                                                                                   />
@@ -8622,7 +8645,7 @@ export default function App() {
                                                                                     />
                                                                                   </>
                                                                                 ) : (
-                                                                                  <XCircle
+                                                                                  <Frown
                                                                                     size={16}
                                                                                     className="text-red-500"
                                                                                   />
