@@ -980,8 +980,9 @@ export default function App() {
   */
 
   const formatTime = (h: number) => {
-    const hh = Math.floor(h);
-    const mm = Math.round((h % 1) * 60);
+    const totalMinutes = Math.round(h * 60);
+    const hh = Math.floor(totalMinutes / 60);
+    const mm = totalMinutes % 60;
     return `${hh.toString().padStart(2, "0")}:${mm.toString().padStart(2, "0")}`;
   };
 
