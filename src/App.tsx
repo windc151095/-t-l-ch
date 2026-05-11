@@ -2357,17 +2357,12 @@ export default function App() {
 
                           return (
                             <div className="col-span-full space-y-10">
-                              {businessHours.map((range, bIdx) => {
+                              {(currentDayConfig?.businessHours || businessHours).map((range, bIdx) => {
                                 const rangeApps = pastApps
                                   .filter((a) => {
-                                    const hour = parseInt(
-                                      a.startTime.split(":")[0],
-                                    );
+                                    const time = parseInt(a.startTime.split(":")[0]) + parseInt(a.startTime.split(":")[1] || "0") / 60;
                                     return (
-                                      (hour >= range.start &&
-                                        hour < range.end) ||
-                                      (range.label === "Chiều" &&
-                                        hour === range.end)
+                                      time >= range.start && time < range.end
                                     );
                                   })
                                   .sort((a, b) =>
@@ -2430,17 +2425,12 @@ export default function App() {
 
                           return (
                             <div className="col-span-full space-y-10">
-                              {businessHours.map((range, bIdx) => {
+                              {(currentDayConfig?.businessHours || businessHours).map((range, bIdx) => {
                                 const rangeApps = displayList
                                   .filter((a) => {
-                                    const hour = parseInt(
-                                      a.startTime.split(":")[0],
-                                    );
+                                    const time = parseInt(a.startTime.split(":")[0]) + parseInt(a.startTime.split(":")[1] || "0") / 60;
                                     return (
-                                      (hour >= range.start &&
-                                        hour < range.end) ||
-                                      (range.label === "Chiều" &&
-                                        hour === range.end)
+                                      time >= range.start && time < range.end
                                     );
                                   })
                                   .sort((a, b) => {
@@ -2600,13 +2590,11 @@ export default function App() {
 
                           return (
                             <div className="col-span-full space-y-10">
-                              {businessHours.map((range, bIdx) => {
+                              {(currentDayConfig?.businessHours || businessHours).map((range, bIdx) => {
                                 const rangeSlots = freeSlots.filter((s) => {
-                                  const hour = parseInt(s.split(":")[0]);
+                                  const time = parseInt(s.split(":")[0]) + parseInt(s.split(":")[1] || "0") / 60;
                                   return (
-                                    (hour >= range.start && hour < range.end) ||
-                                    (range.label === "Chiều" &&
-                                      hour === range.end)
+                                    time >= range.start && time < range.end
                                   );
                                 });
 
