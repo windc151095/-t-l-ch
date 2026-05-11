@@ -980,6 +980,7 @@ export default function App() {
   */
 
   const formatTime = (h: number) => {
+    // Avoid floating point inaccuracies by using a very small epsilon before rounding
     const totalMinutes = Math.round(h * 60);
     const hh = Math.floor(totalMinutes / 60);
     const mm = totalMinutes % 60;
@@ -988,16 +989,12 @@ export default function App() {
 
   const getTimeOptions = (label: string, duration: number) => {
     // Sáng: 08:00 - 12:00, Chiều: 12:00 - 22:00
-    const start = label === "Sáng" ? 8 : 12;
-    const end = label === "Sáng" ? 12 : 22;
-    const options = [];
-    const step = duration / 60;
-
-    // Use a small epsilon to handle floating point precision issues
-    for (let i = start; i <= end + 0.001; i += step) {
-      if (i <= end + 0.001) {
-        options.push(i);
-      }
+    const startMins = (label === "Sáng" ? 8 : 12) * 60;
+    const endMins = (label === "Sáng" ? 12 : 22) * 60;
+    const options: number[] = [];
+    
+    for (let m = startMins; m <= endMins; m += duration) {
+      options.push(m / 60);
     }
     return options;
   };
