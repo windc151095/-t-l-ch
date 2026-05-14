@@ -123,6 +123,8 @@ service cloud.firestore {
           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancellationReason', 'cancelledByAdmin', 'adminAuth']) ||
           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancelledAt', 'adminAuth'])
         )) ||
+        // Action: Edit Time
+        (incoming().diff(existing()).affectedKeys().hasOnly(['date', 'startTime', 'endTime', 'timeEditedByAdmin', 'timeEditReason', 'adminAuth', 'password'])) ||
         // Action: Restore
         (isEffectiveAdmin() && (incoming().status == 'active' || incoming().status == 'cancelled'))
       );

@@ -1249,6 +1249,7 @@ export default function App() {
         endTime: endTime,
         timeEditedByAdmin: true,
         timeEditReason: manageEditReason || deleteField(),
+        adminAuth: isAdmin ? "123456" : deleteField(),
       }).catch((err) =>
         handleFirestoreError(
           err,
