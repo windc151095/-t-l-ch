@@ -16,6 +16,8 @@
         "cancellationReason": { "type": "string", "description": "Lý do hủy lịch từ Admin." },
         "cancelledAt": { "type": "string", "format": "date-time", "description": "When the booking was cancelled." },
         "cancelledByAdmin": { "type": "boolean", "description": "If the cancellation was done by admin." },
+        "timeEditedByAdmin": { "type": "boolean", "description": "If the time was edited by admin." },
+        "timeEditReason": { "type": "string", "description": "Reason for editing time." },
         "duration": { "type": "number", "description": "Duration in minutes." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the booking was made." }
       },

@@ -34,7 +34,7 @@ service cloud.firestore {
     // Pillar 2: Validation Blueprints
     function isValidAppointment(data) {
       return data.keys().hasAll(['clientName', 'guide', 'question', 'date', 'startTime', 'endTime', 'password', 'createdAt'])
-        && data.keys().size() <= 15
+        && data.keys().size() <= 20
         && data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 200
         && data.guide is string && data.guide.size() > 0 && data.guide.size() <= 200
         && data.question is string && data.question.size() > 0 && data.question.size() <= 1000

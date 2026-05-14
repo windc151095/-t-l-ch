@@ -721,6 +721,13 @@ export default function App() {
   const [adminReason, setAdminReason] = useState("");
   const [isSuddenCancel, setIsSuddenCancel] = useState(true);
 
+  const [isEditingManageTime, setIsEditingManageTime] = useState(false);
+  const [manageEditDateStr, setManageEditDateStr] = useState<string>("");
+  const [manageEditSlots, setManageEditSlots] = useState<string[]>([]);
+  const [manageEditTime, setManageEditTime] = useState("");
+  const [manageEditReason, setManageEditReason] = useState("");
+  const [isFetchingEditSlots, setIsFetchingEditSlots] = useState(false);
+
   // Simple Admin Login State
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [adminLogin, setAdminLogin] = useState({ user: "", pass: "" });
@@ -1131,6 +1138,131 @@ export default function App() {
     } catch (err) {
       console.error("Restore error:", err);
       handleFirestoreError(err, "update", `appointments/${id}`);
+    } finally {
+      setIsManaging(false);
+    }
+  };
+
+  const handleEditManageTimeSetup = async (app?: Appointment) => {
+    const targetApp = app || manageAppointment;
+    if (!targetApp) return;
+    setIsEditingManageTime(true);
+    setManageEditDateStr(targetApp.date);
+    setManageEditTime(targetApp.startTime);
+    setManageEditReason("");
+    await loadManageEditSlots(targetApp.date, targetApp.id);
+  };
+
+  const loadManageEditSlots = async (dateStr: string, appId?: string) => {
+    setIsFetchingEditSlots(true);
+    try {
+      const currentAppId = appId || manageAppointment?.id;
+      let cfg: DayConfig | null = null;
+      const daySnap = await getDoc(doc(db, "dayConfigs", dateStr));
+      if (daySnap.exists()) {
+        cfg = daySnap.data() as DayConfig;
+      }
+
+      const dateObj = parse(dateStr, "yyyy-MM-dd", new Date());
+      const activeBusinessHours = cfg?.businessHours || businessHours;
+      const activeDuration = cfg?.duration || slotDuration;
+
+      const rawSlots: string[] = [];
+      activeBusinessHours.forEach((range) => {
+        if (cfg) {
+          if (range.label === "Sáng" && !cfg.morningActive) return;
+          if (range.label === "Chiều" && !cfg.afternoonActive) return;
+        }
+        let current = parse(formatTime(range.start), "H:mm", new Date());
+        const end = parse(formatTime(range.end), "H:mm", new Date());
+        while (current < end) {
+          rawSlots.push(format(current, "HH:mm"));
+          current = addMinutes(current, activeDuration);
+        }
+      });
+      const allSlots = Array.from(new Set(rawSlots)).sort();
+
+      const appSnap = await getDocs(
+        query(
+          collection(db, "appointments"),
+          where("date", "==", dateStr),
+          where("status", "==", "active"),
+        ),
+      );
+      const taken = new Set<string>();
+      appSnap.forEach((docSnap) => {
+        if (docSnap.id !== manageAppointment?.id) {
+          taken.add(docSnap.data().startTime);
+        }
+      });
+
+      const lockSnap = await getDocs(
+        query(collection(db, "lockedSlots"), where("date", "==", dateStr)),
+      );
+      const locked = new Set<string>();
+      lockSnap.forEach((docSnap) => locked.add(docSnap.data().startTime));
+
+      // Also filter out past slots if dateStr is today
+      const isSelectedToday = isSameDay(dateObj, startOfDay(new Date()));
+      const currentTimeStr = format(now, "HH:mm");
+
+      const freeSlots = allSlots.filter((s) => {
+        const isPastSlot = isSelectedToday && s <= currentTimeStr;
+        return !taken.has(s) && !locked.has(s) && !isPastSlot;
+      });
+      setManageEditSlots(freeSlots);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsFetchingEditSlots(false);
+    }
+  };
+
+  const handleEditTimeDateChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const val = e.target.value;
+    setManageEditDateStr(val);
+    setManageEditTime("");
+    if (val) {
+      await loadManageEditSlots(val);
+    }
+  };
+
+  const onSaveManageEditTime = async () => {
+    if (!manageAppointment || !manageEditDateStr || !manageEditTime) return;
+    setIsManaging(true);
+    try {
+      let activeDuration = slotDuration;
+      const daySnap = await getDoc(doc(db, "dayConfigs", manageEditDateStr));
+      if (daySnap.exists()) {
+        activeDuration = daySnap.data().duration;
+      }
+      const endTime = format(
+        addMinutes(parse(manageEditTime, "HH:mm", new Date()), activeDuration),
+        "HH:mm",
+      );
+
+      await updateDoc(doc(db, "appointments", manageAppointment.id), {
+        date: manageEditDateStr,
+        startTime: manageEditTime,
+        endTime: endTime,
+        timeEditedByAdmin: true,
+        timeEditReason: manageEditReason || deleteField(),
+      }).catch((err) =>
+        handleFirestoreError(
+          err,
+          "update",
+          `appointments/${manageAppointment.id}`,
+        ),
+      );
+
+      setIsEditingManageTime(false);
+      setShowManageModal(false);
+      setManageAppointment(null);
+    } catch (err) {
+      console.error(err);
+      alert("Đã xảy ra lỗi khi sửa thời gian: " + err);
     } finally {
       setIsManaging(false);
     }
@@ -3687,6 +3819,17 @@ export default function App() {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setManageAppointment(app);
+                                      setShowManageModal(true);
+                                      handleEditManageTimeSetup(app);
+                                    }}
+                                    title="Chỉnh sửa thời gian"
+                                    className="p-4 text-slate-300 hover:text-yellow-600 bg-slate-50 rounded-[24px] opacity-0 group-hover:opacity-100 transition-all hover:scale-105 active:scale-95"
+                                  >
+                                    <Edit3 size={20} />
+                                  </button>
                                   <button
                                     onClick={() => {
                                       setManageAppointment(app);
@@ -11892,6 +12035,7 @@ export default function App() {
                   onClick={() => {
                     setShowManageModal(false);
                     setManagePassword("");
+                    setIsEditingManageTime(false);
                   }}
                   className="p-2 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
                 >
@@ -11899,10 +12043,86 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-2">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                  Chi tiết
-                </p>
+              {isEditingManageTime ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+                      Chọn Ngày
+                    </label>
+                    <input
+                      type="date"
+                      value={manageEditDateStr}
+                      onChange={handleEditTimeDateChange}
+                      min={format(new Date(), "yyyy-MM-dd")}
+                      className="w-full pl-4 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:border-yellow-400 focus:bg-white transition-all outline-none font-semibold text-slate-600"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">
+                      Chọn Giờ
+                    </label>
+                    {isFetchingEditSlots ? (
+                       <p className="text-xs text-slate-500 font-medium pb-2 px-1">Đang tải...</p>
+                    ) : (manageEditSlots.length === 0 ? (
+                       <p className="text-xs text-red-500 font-medium pb-2 px-1">Không có giờ trống trong ngày này.</p>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2">
+                        {manageEditSlots.map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setManageEditTime(s)}
+                            className={cn(
+                              "py-2 rounded-xl text-sm font-bold border transition-all",
+                              manageEditTime === s
+                                ? "bg-yellow-400 border-yellow-400 text-amber-950 shadow-sm"
+                                : "bg-white border-slate-200 text-slate-600 hover:border-yellow-400"
+                            )}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 inline-flex items-center gap-1.5">
+                      <MessageSquare size={12} className="text-yellow-600" />
+                      Lý do thay đổi (Tùy chọn)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={manageEditReason}
+                      onChange={(e) => setManageEditReason(e.target.value)}
+                      placeholder="Ghi chú thêm... "
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-yellow-400 focus:bg-white transition-all outline-none text-sm font-medium placeholder:text-slate-400 resize-none italic"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => setIsEditingManageTime(false)}
+                      disabled={isManaging}
+                      className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-[0.98] disabled:opacity-40"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      onClick={onSaveManageEditTime}
+                      disabled={isManaging || !manageEditDateStr || !manageEditTime || isFetchingEditSlots}
+                      className="flex-1 py-4 bg-yellow-400 text-amber-950 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-yellow-200 hover:bg-yellow-300 transition-all active:scale-[0.98] disabled:opacity-40"
+                    >
+                      {isManaging ? "Đang lưu..." : "Xác nhận"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-100 space-y-2">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      Chi tiết
+                    </p>
                 <p className="text-sm font-semibold text-slate-700">
                   {manageAppointment.date} Lúc {manageAppointment.startTime}
                 </p>
@@ -11924,6 +12144,19 @@ export default function App() {
                         {manageAppointment.cancellationReason ||
                           "Không rõ lý do"}
                       </p>
+                    </div>
+                  )}
+
+                  {(manageAppointment as any).timeEditedByAdmin && (
+                    <div className="bg-yellow-50 p-2 rounded-lg border border-yellow-100 mt-2">
+                      <p className="text-[10px] text-yellow-600 font-bold uppercase">
+                        Đã được Đổi Giờ (bởi Admin)
+                      </p>
+                      {(manageAppointment as any).timeEditReason && (
+                        <p className="text-xs text-yellow-700 italic font-medium">
+                          Lý do: {(manageAppointment as any).timeEditReason}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -12029,20 +12262,31 @@ export default function App() {
 
                 <div className="flex gap-3 pt-2">
                   {manageAppointment.status === "active" ? (
-                    <button
-                      onClick={() => handleCancelAppointment(false)}
-                      disabled={isManaging || (!isAdmin && !managePassword)}
-                      className={cn(
-                        "flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-200 hover:bg-red-600 transition-all active:scale-[0.98] disabled:opacity-40",
-                        isAdmin && "bg-amber-950 shadow-amber-950/20",
+                    <>
+                      {isAdmin && (
+                        <button
+                          onClick={handleEditManageTimeSetup}
+                          disabled={isManaging}
+                          className="flex-1 py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-[0.98] disabled:opacity-40"
+                        >
+                          Đổi Giờ
+                        </button>
                       )}
-                    >
-                      {isManaging
-                        ? "Đang hửy..."
-                        : isAdmin
-                          ? "Hủy lịch (Lưu lại)"
-                          : "Xác nhận hủy lịch"}
-                    </button>
+                      <button
+                        onClick={() => handleCancelAppointment(false)}
+                        disabled={isManaging || (!isAdmin && !managePassword)}
+                        className={cn(
+                          "flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-200 hover:bg-red-600 transition-all active:scale-[0.98] disabled:opacity-40",
+                          isAdmin && "bg-amber-950 shadow-amber-950/20",
+                        )}
+                      >
+                        {isManaging
+                          ? "Đang hủy..."
+                          : isAdmin
+                            ? "Hủy (Lưu lại)"
+                            : "Xác nhận hủy"}
+                      </button>
+                    </>
                   ) : (
                     <button
                       onClick={() => handleRestoreAppointment()}
@@ -12073,6 +12317,8 @@ export default function App() {
                   )}
                 </div>
               </div>
+              </>
+              )}
             </motion.div>
           </div>
         )}
