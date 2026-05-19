@@ -431,7 +431,7 @@ export default function App() {
     { id: "studentId", width: 80, label: "MÃ HỌC VIÊN" },
     { id: "fullName", width: 160, label: "HỌ TÊN" },
     { id: "age", width: 60, label: "TUỔI" },
-    { id: "guideName", width: 80, label: "HDV" },
+    { id: "guideName", width: "max-content", label: "HDV" },
     { id: "studyGroup", width: 100, label: "GROUP HỌC TẬP" },
     { id: "fbLink", width: 100, label: "FACEBOOK" },
   ];
@@ -445,10 +445,12 @@ export default function App() {
 
     if (tableColumnConfig[colId]?.hidden) return { display: "none" };
 
+    const widthVal = typeof width === "number" ? `${width}px` : width;
+
     const baseStyle: any = {
-      width: `${width}px`,
-      minWidth: `${width}px`,
-      maxWidth: `${width}px`,
+      width: widthVal,
+      minWidth: widthVal,
+      maxWidth: widthVal,
     };
 
     if (isHeader) {
@@ -7569,11 +7571,11 @@ export default function App() {
                                                             )}
                                                             className={getColumnClass(
                                                               "guideName",
-                                                              "px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle",
+                                                              "px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle text-left",
                                                             )}
                                                             rowSpan={2}
                                                           >
-                                                            <div className="flex items-center justify-center gap-1">
+                                                            <div className="flex items-center justify-start gap-1">
                                                               HDV
                                                               {renderColumnMenu(
                                                                 "guideName",
@@ -8528,7 +8530,7 @@ export default function App() {
                                                                   )}
                                                                   className={getColumnClass(
                                                                     "guideName",
-                                                                    "px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5]",
+                                                                    "px-2 py-1 border-r border-[#E2E8F0] bg-[#F3E5F5] text-left whitespace-nowrap",
                                                                   )}
                                                                 >
                                                                   {cv.guideName}
