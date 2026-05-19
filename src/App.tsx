@@ -151,6 +151,7 @@ interface Course {
   studyGroups?: string[];
   tracking?: Record<string, any>;
   removedStudentIds?: string[];
+  autoAddFromDate?: string;
 }
 
 interface CV {
@@ -363,6 +364,7 @@ export default function App() {
     start: "",
     end: "",
     closingDate: "",
+    autoAddFromDate: "",
   });
   const [selectedLearningCvIds, setSelectedLearningCvIds] = useState<string[]>(
     [],
@@ -382,9 +384,6 @@ export default function App() {
     true,
   );
   const [trackingStampHanh, setTrackingStampHanh] = useState<string>("⭐");
-  const [trackingStampTimely, setTrackingStampTimely] = useState<
-    boolean | null
-  >(true);
   const [isEditingTracking, setIsEditingTracking] = useState(false);
   const [isTrackingFilterVisible, setIsTrackingFilterVisible] = useState(false);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
@@ -1612,7 +1611,27 @@ export default function App() {
         if (isReenroll) {
           newData.appApproved = true;
         }
-        await addDoc(collection(db, "cvs"), newData);
+        const docRef = await addDoc(collection(db, "cvs"), newData);
+        const newCvId = docRef.id;
+
+        const currentTimestamp = Date.now();
+        const coursesToUpdate = courses.filter((c) => {
+          if (!c.autoAddFromDate || !c.closingDate)
+            return false;
+          const fromDate = new Date(c.autoAddFromDate).setHours(0, 0, 0, 0);
+          const toDate = new Date(c.closingDate).setHours(23, 59, 59, 999);
+          return currentTimestamp >= fromDate && currentTimestamp <= toDate;
+        });
+
+        if (coursesToUpdate.length > 0) {
+          await Promise.all(
+            coursesToUpdate.map((c) =>
+              updateDoc(doc(db, "courses", c.id), {
+                studentIds: [...c.studentIds, newCvId],
+              }),
+            ),
+          );
+        }
       }
       setCvFormData({
         fullName: "",
@@ -4234,6 +4253,7 @@ export default function App() {
                                         start: "",
                                         end: "",
                                         closingDate: "",
+                                        autoAddFromDate: "",
                                       });
                                       setEditingCourseId(null);
                                       setSelectedLearningCvIds([]);
@@ -5231,6 +5251,7 @@ export default function App() {
                                                     end: course.endDate,
                                                     closingDate:
                                                       course.closingDate,
+                                                    autoAddFromDate: course.autoAddFromDate || "",
                                                   });
                                                   setEditingCourseId(course.id);
                                                   setSelectedLearningCvIds(
@@ -7039,7 +7060,7 @@ export default function App() {
                                                         <div className="w-px h-6 bg-slate-300"></div>
                                                         <div className="flex items-center gap-3">
                                                           <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                                                            Tem thẻ Hành:
+                                                            Tem thẻ LT, TH, T.Gian:
                                                           </span>
                                                           <div className="flex gap-1.5">
                                                             {[
@@ -7052,12 +7073,8 @@ export default function App() {
                                                                 label: "⭐",
                                                               },
                                                               {
-                                                                value: "⭐⭐",
-                                                                label: "⭐⭐",
-                                                              },
-                                                              {
-                                                                value: "❤️❤️❤️",
-                                                                label: "❤️❤️❤️",
+                                                                value: "❤️",
+                                                                label: "❤️",
                                                               },
                                                               {
                                                                 value: "",
@@ -7292,7 +7309,7 @@ export default function App() {
                                                             <div className="w-px h-6 bg-slate-300"></div>
                                                             <div className="flex items-center gap-3">
                                                               <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                                                                TEM THẺ HÀNH:
+                                                                TEM THẺ LT, TH, T.GIAN:
                                                               </span>
                                                               <div className="flex gap-1.5">
                                                                 {[
@@ -7305,27 +7322,16 @@ export default function App() {
                                                                     label: "⭐",
                                                                   },
                                                                   {
-                                                                    value:
-                                                                      "⭐⭐",
-                                                                    label:
-                                                                      "⭐⭐",
-                                                                  },
-                                                                  {
-                                                                    value:
-                                                                      "❤️❤️❤️",
-                                                                    label:
-                                                                      "❤️❤️❤️",
+                                                                    value: "❤️",
+                                                                    label: "❤️",
                                                                   },
                                                                   {
                                                                     value: "",
-                                                                    label:
-                                                                      "Trống",
+                                                                    label: "Trống",
                                                                   },
                                                                 ].map((opt) => (
                                                                   <button
-                                                                    key={
-                                                                      opt.value
-                                                                    }
+                                                                    key={opt.value}
                                                                     onClick={() =>
                                                                       setTrackingStampHanh(
                                                                         opt.value,
@@ -7333,58 +7339,8 @@ export default function App() {
                                                                     }
                                                                     className={cn(
                                                                       "px-3 py-1.5 rounded-lg text-sm font-bold border transition-all",
-                                                                      trackingStampHanh ===
-                                                                        opt.value
+                                                                      trackingStampHanh === opt.value
                                                                         ? "bg-white border-purple-400 shadow-sm ring-2 ring-purple-100"
-                                                                        : "bg-transparent border-transparent hover:bg-slate-200 text-slate-500",
-                                                                    )}
-                                                                  >
-                                                                    {opt.label}
-                                                                  </button>
-                                                                ))}
-                                                              </div>
-                                                            </div>
-                                                            <div className="w-px h-6 bg-slate-300"></div>
-                                                            <div className="flex items-center gap-3">
-                                                              <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                                                                Tem thẻ Thời gian:
-                                                              </span>
-                                                              <div className="flex gap-1.5">
-                                                                {[
-                                                                  {
-                                                                    value: true,
-                                                                    label: (
-                                                                      <div className="relative">
-                                                                        <Smile size={20} className="text-amber-600" />
-                                                                        <Check size={10} className="absolute -top-0.5 -right-0.5 text-green-600 font-black stroke-[4] drop-shadow-sm" />
-                                                                      </div>
-                                                                    ),
-                                                                  },
-                                                                    {
-                                                                    value: false,
-                                                                    label: (
-                                                                      <Frown size={20} className="text-red-500" />
-                                                                    ),
-                                                                  },
-                                                                  {
-                                                                    value: null,
-                                                                    label: <span className="text-[10px]">Trống</span>,
-                                                                  },
-                                                                ].map((opt) => (
-                                                                  <button
-                                                                    key={String(
-                                                                      opt.value,
-                                                                    )}
-                                                                    onClick={() =>
-                                                                      setTrackingStampTimely(
-                                                                        opt.value,
-                                                                      )
-                                                                    }
-                                                                    className={cn(
-                                                                      "px-2 py-1.5 rounded-lg border transition-all flex items-center justify-center",
-                                                                      trackingStampTimely ===
-                                                                        opt.value
-                                                                        ? "bg-white border-amber-600 shadow-sm ring-2 ring-orange-100"
                                                                         : "bg-transparent border-transparent hover:bg-slate-200 text-slate-500",
                                                                     )}
                                                                   >
@@ -7733,7 +7689,7 @@ export default function App() {
                                                           ].map((b) => (
                                                             <th
                                                               key={b.id}
-                                                              colSpan={3}
+                                                              colSpan={4}
                                                               className="px-2 py-1 border-r border-[#E2E8F0] bg-[#FFE699]"
                                                             >
                                                               {b.label}
@@ -7766,7 +7722,8 @@ export default function App() {
                                                                 bId: string,
                                                                 type:
                                                                   | "hoc"
-                                                                  | "hanh"
+                                                                  | "lt"
+                                                                  | "th"
                                                                   | "timely",
                                                               ) => {
                                                                 if (
@@ -7948,22 +7905,29 @@ export default function App() {
                                                                 <th className="px-1 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">
                                                                   <div className="flex flex-col items-center gap-1 font-bold">
                                                                     <span>
-                                                                      HÀNH
+                                                                      LT
                                                                     </span>
                                                                     {renderHocHanhFilterMenu(
                                                                       b.id,
-                                                                      "hanh",
+                                                                      "lt",
+                                                                    )}
+                                                                  </div>
+                                                                </th>
+                                                                <th className="px-1 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">
+                                                                  <div className="flex flex-col items-center gap-1 font-bold">
+                                                                    <span>
+                                                                      TH
+                                                                    </span>
+                                                                    {renderHocHanhFilterMenu(
+                                                                      b.id,
+                                                                      "th",
                                                                     )}
                                                                   </div>
                                                                 </th>
                                                                 <th className="px-1 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">
                                                                   <div className="flex flex-col items-center gap-1 font-bold">
                                                                     <div className="relative">
-                                                                      <Smile size={18} className="text-amber-600" />
-                                                                      <Check
-                                                                        size={8}
-                                                                        className="absolute -top-0.5 -right-0.5 text-green-600 font-black stroke-[4] drop-shadow-sm"
-                                                                      />
+                                                                      <Clock size={16} className="text-amber-600" />
                                                                     </div>
                                                                     {renderHocHanhFilterMenu(
                                                                       b.id,
@@ -8134,42 +8098,83 @@ export default function App() {
                                                                     return false;
                                                                 }
 
-                                                                const fHanh =
+                                                                const fLt =
                                                                   trackingFilters[
-                                                                    `${sId}_hanh`
+                                                                    `${sId}_lt`
                                                                   ];
                                                                 if (
-                                                                  fHanh &&
+                                                                  fLt &&
                                                                   Array.isArray(
-                                                                    fHanh,
+                                                                    fLt,
                                                                   ) &&
-                                                                  fHanh.length >
+                                                                  fLt.length >
                                                                     0
                                                                 ) {
-                                                                  const strHanh =
+                                                                  const strLt =
                                                                     track[sId]
-                                                                      ?.hanh ||
+                                                                      ?.lt ||
                                                                     "Trống";
                                                                   if (
-                                                                    !fHanh.includes(
-                                                                      strHanh,
+                                                                    !fLt.includes(
+                                                                      strLt,
                                                                     )
                                                                   )
                                                                     return false;
                                                                 } else if (
-                                                                  fHanh &&
-                                                                  typeof fHanh ===
+                                                                  fLt &&
+                                                                  typeof fLt ===
                                                                     "string"
                                                                 ) {
-                                                                  const strHanh =
+                                                                  const strLt =
                                                                     track[sId]
-                                                                      ?.hanh ||
+                                                                      ?.lt ||
                                                                     "";
                                                                   if (
-                                                                    !strHanh
+                                                                    !strLt
                                                                       .toLowerCase()
                                                                       .includes(
-                                                                        fHanh.toLowerCase(),
+                                                                        fLt.toLowerCase(),
+                                                                      )
+                                                                  )
+                                                                    return false;
+                                                                }
+
+                                                                const fTh =
+                                                                  trackingFilters[
+                                                                    `${sId}_th`
+                                                                  ];
+                                                                if (
+                                                                  fTh &&
+                                                                  Array.isArray(
+                                                                    fTh,
+                                                                  ) &&
+                                                                  fTh.length >
+                                                                    0
+                                                                ) {
+                                                                  const strTh =
+                                                                    track[sId]
+                                                                      ?.th ||
+                                                                    "Trống";
+                                                                  if (
+                                                                    !fTh.includes(
+                                                                      strTh,
+                                                                    )
+                                                                  )
+                                                                    return false;
+                                                                } else if (
+                                                                  fTh &&
+                                                                  typeof fTh ===
+                                                                    "string"
+                                                                ) {
+                                                                  const strTh =
+                                                                    track[sId]
+                                                                      ?.th ||
+                                                                    "";
+                                                                  if (
+                                                                    !strTh
+                                                                      .toLowerCase()
+                                                                      .includes(
+                                                                        fTh.toLowerCase(),
                                                                       )
                                                                   )
                                                                     return false;
@@ -8312,7 +8317,8 @@ export default function App() {
                                                                 lesson: string,
                                                                 field:
                                                                   | "hoc"
-                                                                  | "hanh"
+                                                                  | "lt"
+                                                                  | "th"
                                                                   | "timely"
                                                                   | "commitTime",
                                                                 value: any,
@@ -8700,7 +8706,7 @@ export default function App() {
                                                                           onClick={() =>
                                                                             updateTracking(
                                                                               b.id,
-                                                                              "hanh",
+                                                                              "lt",
                                                                               trackingStampHanh,
                                                                             )
                                                                           }
@@ -8709,7 +8715,7 @@ export default function App() {
                                                                           {track[
                                                                             b.id
                                                                           ]
-                                                                            ?.hanh ||
+                                                                            ?.lt ||
                                                                             ""}
                                                                         </button>
                                                                       ) : (
@@ -8717,7 +8723,36 @@ export default function App() {
                                                                           {track[
                                                                             b.id
                                                                           ]
-                                                                            ?.hanh ||
+                                                                            ?.lt ||
+                                                                            ""}
+                                                                        </div>
+                                                                      )}
+                                                                    </td>
+                                                                    <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
+                                                                      {isAdmin &&
+                                                                      isEditingTracking ? (
+                                                                        <button
+                                                                          onClick={() =>
+                                                                            updateTracking(
+                                                                              b.id,
+                                                                              "th",
+                                                                              trackingStampHanh,
+                                                                            )
+                                                                          }
+                                                                          className="text-sm w-full h-full min-h-[24px] flex justify-center items-center rounded hover:bg-[#FFE082]"
+                                                                        >
+                                                                          {track[
+                                                                            b.id
+                                                                          ]
+                                                                            ?.th ||
+                                                                            ""}
+                                                                        </button>
+                                                                      ) : (
+                                                                        <div className="text-sm w-full h-full flex justify-center items-center py-1">
+                                                                          {track[
+                                                                            b.id
+                                                                          ]
+                                                                            ?.th ||
                                                                             ""}
                                                                         </div>
                                                                       )}
@@ -8730,60 +8765,16 @@ export default function App() {
                                                                               updateTracking(
                                                                                 b.id,
                                                                                 "timely",
-                                                                                trackingStampTimely,
+                                                                                trackingStampHanh,
                                                                               )
                                                                             }
-                                                                            className="relative p-1 rounded hover:bg-[#FFE082] flex justify-center items-center w-full min-h-[28px]"
+                                                                            className="text-sm w-full h-full min-h-[24px] flex justify-center items-center rounded hover:bg-[#FFE082]"
                                                                           >
-                                                                            {track[b.id]?.timely === true || track[b.id]?.timely === false ? (
-                                                                              <div className="relative">
-                                                                                {track[b.id]?.timely === true ? (
-                                                                                  <>
-                                                                                    <Smile
-                                                                                      size={16}
-                                                                                      className="text-amber-600"
-                                                                                    />
-                                                                                    <Check
-                                                                                      size={10}
-                                                                                      className="absolute -top-1 -right-1 text-green-600 font-black stroke-[4] drop-shadow-sm"
-                                                                                    />
-                                                                                  </>
-                                                                                ) : (
-                                                                                  <Frown
-                                                                                    size={16}
-                                                                                    className="text-red-500"
-                                                                                  />
-                                                                                )}
-                                                                              </div>
-                                                                            ) : (
-                                                                              <div className="w-5 h-5"></div>
-                                                                            )}
+                                                                            {track[b.id]?.timely || ""}
                                                                           </button>
                                                                         ) : (
-                                                                          <div className="flex justify-center items-center py-1">
-                                                                            {track[b.id]?.timely === true || track[b.id]?.timely === false ? (
-                                                                              <div className="relative">
-                                                                                {track[b.id]?.timely === true ? (
-                                                                                  <>
-                                                                                    <Smile
-                                                                                      size={16}
-                                                                                      className="text-amber-600"
-                                                                                    />
-                                                                                    <Check
-                                                                                      size={10}
-                                                                                      className="absolute -top-1 -right-1 text-green-600 font-black stroke-[4] drop-shadow-sm"
-                                                                                    />
-                                                                                  </>
-                                                                                ) : (
-                                                                                  <Frown
-                                                                                    size={16}
-                                                                                    className="text-red-500"
-                                                                                  />
-                                                                                )}
-                                                                              </div>
-                                                                            ) : (
-                                                                              <div className="w-5 h-5"></div>
-                                                                            )}
+                                                                          <div className="text-sm w-full h-full flex justify-center items-center py-1">
+                                                                            {track[b.id]?.timely || ""}
                                                                           </div>
                                                                         )}
                                                                       </td>
@@ -8930,7 +8921,7 @@ export default function App() {
                                                                           ?.hoc ===
                                                                         true,
                                                                     ).length;
-                                                                  const hanhCount =
+                                                                  const ltCount =
                                                                     nonNgungCvs.filter(
                                                                       (cv) =>
                                                                         course
@@ -8939,14 +8930,33 @@ export default function App() {
                                                                         ]?.[
                                                                           b.id
                                                                         ]
-                                                                          ?.hanh &&
+                                                                          ?.lt &&
                                                                         course
                                                                           .tracking?.[
                                                                           cv.id
                                                                         ]?.[
                                                                           b.id
                                                                         ]
-                                                                          ?.hanh !==
+                                                                          ?.lt !==
+                                                                          "🖤",
+                                                                    ).length;
+                                                                  const thCount =
+                                                                    nonNgungCvs.filter(
+                                                                      (cv) =>
+                                                                        course
+                                                                          .tracking?.[
+                                                                          cv.id
+                                                                        ]?.[
+                                                                          b.id
+                                                                        ]
+                                                                          ?.th &&
+                                                                        course
+                                                                          .tracking?.[
+                                                                          cv.id
+                                                                        ]?.[
+                                                                          b.id
+                                                                        ]
+                                                                          ?.th !==
                                                                           "🖤",
                                                                     ).length;
                                                                   const timelyCount =
@@ -8958,8 +8968,15 @@ export default function App() {
                                                                         ]?.[
                                                                           b.id
                                                                         ]
-                                                                          ?.timely ===
-                                                                        true,
+                                                                          ?.timely &&
+                                                                        course
+                                                                          .tracking?.[
+                                                                          cv.id
+                                                                        ]?.[
+                                                                          b.id
+                                                                        ]
+                                                                          ?.timely !==
+                                                                          "🖤",
                                                                     ).length;
                                                                   return (
                                                                     <React.Fragment
@@ -9030,160 +9047,11 @@ export default function App() {
                                                                             </div>
                                                                           )}
                                                                       </td>
-                                                                      <td
-                                                                        className="relative px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-blue-700 cursor-pointer hover:bg-slate-200"
-                                                                        onClick={(
-                                                                          e,
-                                                                        ) => {
-                                                                          e.stopPropagation();
-                                                                          setActiveTotalMenu(
-                                                                            activeTotalMenu?.lessonId ===
-                                                                              b.id &&
-                                                                              activeTotalMenu?.type ===
-                                                                                "hanh"
-                                                                              ? null
-                                                                              : {
-                                                                                  lessonId:
-                                                                                    b.id,
-                                                                                  type: "hanh",
-                                                                                },
-                                                                          );
-                                                                        }}
-                                                                      >
-                                                                        {
-                                                                          hanhCount
-                                                                        }
-                                                                        {activeTotalMenu?.lessonId ===
-                                                                          b.id &&
-                                                                          activeTotalMenu?.type ===
-                                                                            "hanh" && (
-                                                                            <div
-                                                                              className="absolute z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-3 left-1/2 -translate-x-1/2 bottom-full mb-1 text-[11px] text-slate-800 whitespace-nowrap min-w-[140px]"
-                                                                              onClick={(
-                                                                                e,
-                                                                              ) =>
-                                                                                e.stopPropagation()
-                                                                              }
-                                                                            >
-                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
-                                                                                <span className="flex items-center gap-1.5">
-                                                                                  <span className="text-sm">
-                                                                                    🖤
-                                                                                  </span>{" "}
-                                                                                  Không
-                                                                                  làm
-                                                                                </span>
-                                                                                <span className="font-black">
-                                                                                  {
-                                                                                    nonNgungCvs.filter(
-                                                                                      (
-                                                                                        cv,
-                                                                                      ) =>
-                                                                                        course
-                                                                                          .tracking?.[
-                                                                                          cv
-                                                                                            .id
-                                                                                        ]?.[
-                                                                                          b
-                                                                                            .id
-                                                                                        ]
-                                                                                          ?.hanh ===
-                                                                                        "🖤",
-                                                                                    )
-                                                                                      .length
-                                                                                  }
-                                                                                </span>
-                                                                              </div>
-                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
-                                                                                <span className="flex items-center gap-1.5">
-                                                                                  <span className="text-sm">
-                                                                                    ⭐
-                                                                                  </span>{" "}
-                                                                                  Làm
-                                                                                  đối
-                                                                                  phó
-                                                                                </span>
-                                                                                <span className="font-black">
-                                                                                  {
-                                                                                    nonNgungCvs.filter(
-                                                                                      (
-                                                                                        cv,
-                                                                                      ) =>
-                                                                                        course
-                                                                                          .tracking?.[
-                                                                                          cv
-                                                                                            .id
-                                                                                        ]?.[
-                                                                                          b
-                                                                                            .id
-                                                                                        ]
-                                                                                          ?.hanh ===
-                                                                                        "⭐",
-                                                                                    )
-                                                                                      .length
-                                                                                  }
-                                                                                </span>
-                                                                              </div>
-                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
-                                                                                <span className="flex items-center gap-1.5 text-sm tracking-tighter">
-                                                                                  ⭐⭐{" "}
-                                                                                  <span className="text-[11px] ml-1 font-normal tracking-normal text-slate-800">
-                                                                                    Làm
-                                                                                    tốt
-                                                                                  </span>
-                                                                                </span>
-                                                                                <span className="font-black">
-                                                                                  {
-                                                                                    nonNgungCvs.filter(
-                                                                                      (
-                                                                                        cv,
-                                                                                      ) =>
-                                                                                        course
-                                                                                          .tracking?.[
-                                                                                          cv
-                                                                                            .id
-                                                                                        ]?.[
-                                                                                          b
-                                                                                            .id
-                                                                                        ]
-                                                                                          ?.hanh ===
-                                                                                        "⭐⭐",
-                                                                                    )
-                                                                                      .length
-                                                                                  }
-                                                                                </span>
-                                                                              </div>
-                                                                              <div className="flex justify-between gap-4 py-1.5 items-center">
-                                                                                <span className="flex items-center gap-1.5 text-sm tracking-tighter">
-                                                                                  ❤️❤️❤️{" "}
-                                                                                  <span className="text-[11px] ml-1 font-normal tracking-normal text-slate-800">
-                                                                                    Xuất
-                                                                                    sắc
-                                                                                  </span>
-                                                                                </span>
-                                                                                <span className="font-black text-rose-500">
-                                                                                  {
-                                                                                    nonNgungCvs.filter(
-                                                                                      (
-                                                                                        cv,
-                                                                                      ) =>
-                                                                                        course
-                                                                                          .tracking?.[
-                                                                                          cv
-                                                                                            .id
-                                                                                        ]?.[
-                                                                                          b
-                                                                                            .id
-                                                                                        ]
-                                                                                          ?.hanh ===
-                                                                                        "❤️❤️❤️",
-                                                                                    )
-                                                                                      .length
-                                                                                  }
-                                                                                </span>
-                                                                              </div>
-                                                                            </div>
-                                                                          )}
+                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-blue-700">
+                                                                        {ltCount}
+                                                                      </td>
+                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-purple-700">
+                                                                        {thCount}
                                                                       </td>
                                                                       <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-slate-600">
                                                                         {
@@ -12813,7 +12681,30 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="max-h-[30vh] overflow-y-auto pr-2 space-y-3 mb-6">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mt-4">
+                <div className="mb-4">
+                  <h3 className="text-sm font-bold text-slate-800">Tự động thêm CV vào danh sách</h3>
+                  <p className="text-xs font-medium text-slate-500">Tự động đẩy học viên mới vào group khi đăng ký thành công nếu thời gian nộp CV của họ nằm sau ngày bên dưới và trước ngày chốt danh sách.</p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
+                    Bắt đầu thêm từ ngày (theo ngày gửi CV)
+                  </label>
+                  <input
+                    type="date"
+                    value={courseForm.autoAddFromDate}
+                    onChange={(e) =>
+                      setCourseForm((prev) => ({
+                        ...prev,
+                        autoAddFromDate: e.target.value,
+                      }))
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="max-h-[30vh] overflow-y-auto pr-2 space-y-3 mt-6 mb-6">
                 {(() => {
                   const filteredLearningCvs = cvs.filter((cv) => {
                     if (!courseForm.start || !courseForm.end) return true;
@@ -12968,6 +12859,7 @@ export default function App() {
                                 endDate: courseForm.end,
                                 closingDate: courseForm.closingDate,
                                 studentIds: selectedLearningCvIds,
+                                autoAddFromDate: courseForm.autoAddFromDate || deleteField(),
                                 removedStudentIds: [
                                   ...(course.removedStudentIds || []),
                                   ...removedIds,
@@ -12989,6 +12881,7 @@ export default function App() {
                           endDate: courseForm.end,
                           closingDate: courseForm.closingDate,
                           studentIds: selectedLearningCvIds,
+                          autoAddFromDate: courseForm.autoAddFromDate || deleteField(),
                         });
                         setChromeAlert("Đã cập nhật khóa học!");
                       } else {
@@ -12999,6 +12892,7 @@ export default function App() {
                           closingDate: courseForm.closingDate,
                           studentIds: selectedLearningCvIds,
                           createdAt: serverTimestamp(),
+                          autoAddFromDate: courseForm.autoAddFromDate || null,
                         });
                         setChromeAlert(
                           `Đã tạo khóa học với ${selectedLearningCvIds.length} học viên thành công!`,
@@ -13011,6 +12905,7 @@ export default function App() {
                         start: "",
                         end: "",
                         closingDate: "",
+                        autoAddFromDate: "",
                       });
                       setEditingCourseId(null);
                     } catch (e) {
