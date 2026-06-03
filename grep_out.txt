@@ -1,0 +1,21 @@
+270-  >("appointments");
+271-  const [cvFilter, setCvFilter] = useState<
+272-    "all" | "pending" | "approved" | "rejected"
+273-  >("all");
+274-  const [selectedPaymentImage, setSelectedPaymentImage] = useState<
+275-    string | null
+276-  >(null);
+277-  const [selectedAppCvIds, setSelectedAppCvIds] = useState<string[]>([]);
+278-  const [isAppApprovalMode, setIsAppApprovalMode] = useState(false);
+279-  const [selectedDeleteCvIds, setSelectedDeleteCvIds] = useState<string[]>([]);
+280:  const [isDeleteCvMode, setIsDeleteCvMode] = useState(false);
+281-  const [appRejectReasonInput, setAppRejectReasonInput] = useState("");
+282-  const [cvs, setCvs] = useState<CV[]>([]);
+283-  const [showCVModal, setShowCVModal] = useState(false);
+284-  const [editingCvId, setEditingCvId] = useState<string | null>(null);
+285-  const [cvModalTab, setCvModalTab] = useState<
+286-    "search" | "create" | "reenroll"
+287-  >("create");
+288-  const [cvSearchPIN, setCvSearchPIN] = useState("");
+289-  const [cvSearchPhoneLast4, setCvSearchPhoneLast4] = useState("");
+290-  const [foundCVs, setFoundCVs] = useState<CV[]>([]);

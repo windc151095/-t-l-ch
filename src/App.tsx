@@ -278,7 +278,10 @@ export default function App() {
   const [isAppApprovalMode, setIsAppApprovalMode] = useState(false);
   const [selectedDeleteCvIds, setSelectedDeleteCvIds] = useState<string[]>([]);
   const [isDeleteCvMode, setIsDeleteCvMode] = useState(false);
+  const [deleteStartDate, setDeleteStartDate] = useState<string>("");
+  const [deleteEndDate, setDeleteEndDate] = useState<string>("");
   const [appRejectReasonInput, setAppRejectReasonInput] = useState("");
+
   const [cvs, setCvs] = useState<CV[]>([]);
   const [showCVModal, setShowCVModal] = useState(false);
   const [editingCvId, setEditingCvId] = useState<string | null>(null);
@@ -406,7 +409,7 @@ export default function App() {
   const [isHeaderFixed, setIsHeaderFixed] = useState(true);
   const [activeTotalMenu, setActiveTotalMenu] = useState<{
     lessonId: string;
-    type: "hoc" | "hanh";
+    type: "hoc" | "lt" | "th" | "timely";
   } | null>(null);
   const [trackingHistory, setTrackingHistory] = useState<any[]>([]);
 
@@ -431,7 +434,7 @@ export default function App() {
     { id: "studentId", width: 80, label: "MÃ HỌC VIÊN" },
     { id: "fullName", width: 160, label: "HỌ TÊN" },
     { id: "age", width: 60, label: "TUỔI" },
-    { id: "guideName", width: "max-content", label: "HDV" },
+    { id: "guideName", width: 85, label: "HƯỚNG DẪN VIÊN" },
     { id: "studyGroup", width: 100, label: "GROUP HỌC TẬP" },
     { id: "fbLink", width: 100, label: "FACEBOOK" },
   ];
@@ -1000,7 +1003,7 @@ export default function App() {
     const startMins = (label === "Sáng" ? 8 : 12) * 60;
     const endMins = (label === "Sáng" ? 12 : 22) * 60;
     const options: number[] = [];
-    
+
     for (let m = startMins; m <= endMins; m += duration) {
       options.push(m / 60);
     }
@@ -1618,8 +1621,7 @@ export default function App() {
 
         const currentTimestamp = Date.now();
         const coursesToUpdate = courses.filter((c) => {
-          if (!c.autoAddFromDate || !c.closingDate)
-            return false;
+          if (!c.autoAddFromDate || !c.closingDate) return false;
           const fromDate = new Date(c.autoAddFromDate).setHours(0, 0, 0, 0);
           const toDate = new Date(c.closingDate).setHours(23, 59, 59, 999);
           return currentTimestamp >= fromDate && currentTimestamp <= toDate;
@@ -1943,9 +1945,9 @@ export default function App() {
     const { utils, writeFile } = await import("xlsx");
 
     let filteredData = cvs;
-    
+
     // Always exclude re-enroll CVs for these exports as requested
-    filteredData = filteredData.filter(c => c.type !== "reenroll");
+    filteredData = filteredData.filter((c) => c.type !== "reenroll");
 
     if (adminCvTab === "learning") {
       // ... existing learning filter if any ...
@@ -2023,6 +2025,12 @@ export default function App() {
         Tuổi: cv.age,
         "Hướng dẫn viên": cv.guideName,
         "Group học tập": cv.studyGroup || "",
+        "Trạng thái duyệt App": cv.appApproved
+          ? "Đã duyệt"
+          : cv.appRejectedReason
+            ? "Từ chối"
+            : "Chưa duyệt",
+        "Lý do": cv.appRejectedReason || "",
       }));
     } else {
       worksheetData = filteredData.map((cv, index) => ({
@@ -2052,6 +2060,12 @@ export default function App() {
         "Tên học viên": cv.fullName,
         Tuổi: cv.age,
         "Hướng dẫn viên": cv.guideName,
+        "Trạng thái duyệt App": cv.appApproved
+          ? "Đã duyệt"
+          : cv.appRejectedReason
+            ? "Từ chối"
+            : "Chưa duyệt",
+        "Lý do": cv.appRejectedReason || "",
       }));
     }
 
@@ -2508,10 +2522,17 @@ export default function App() {
 
                           return (
                             <div className="col-span-full space-y-10">
-                              {(currentDayConfig?.businessHours || businessHours).map((range, bIdx) => {
+                              {(
+                                currentDayConfig?.businessHours || businessHours
+                              ).map((range, bIdx) => {
                                 const rangeApps = pastApps
                                   .filter((a) => {
-                                    const time = parseInt(a.startTime.split(":")[0]) + parseInt(a.startTime.split(":")[1] || "0") / 60;
+                                    const time =
+                                      parseInt(a.startTime.split(":")[0]) +
+                                      parseInt(
+                                        a.startTime.split(":")[1] || "0",
+                                      ) /
+                                        60;
                                     return (
                                       time >= range.start && time < range.end
                                     );
@@ -2576,10 +2597,17 @@ export default function App() {
 
                           return (
                             <div className="col-span-full space-y-10">
-                              {(currentDayConfig?.businessHours || businessHours).map((range, bIdx) => {
+                              {(
+                                currentDayConfig?.businessHours || businessHours
+                              ).map((range, bIdx) => {
                                 const rangeApps = displayList
                                   .filter((a) => {
-                                    const time = parseInt(a.startTime.split(":")[0]) + parseInt(a.startTime.split(":")[1] || "0") / 60;
+                                    const time =
+                                      parseInt(a.startTime.split(":")[0]) +
+                                      parseInt(
+                                        a.startTime.split(":")[1] || "0",
+                                      ) /
+                                        60;
                                     return (
                                       time >= range.start && time < range.end
                                     );
@@ -2741,9 +2769,13 @@ export default function App() {
 
                           return (
                             <div className="col-span-full space-y-10">
-                              {(currentDayConfig?.businessHours || businessHours).map((range, bIdx) => {
+                              {(
+                                currentDayConfig?.businessHours || businessHours
+                              ).map((range, bIdx) => {
                                 const rangeSlots = freeSlots.filter((s) => {
-                                  const time = parseInt(s.split(":")[0]) + parseInt(s.split(":")[1] || "0") / 60;
+                                  const time =
+                                    parseInt(s.split(":")[0]) +
+                                    parseInt(s.split(":")[1] || "0") / 60;
                                   return (
                                     time >= range.start && time < range.end
                                   );
@@ -4225,22 +4257,78 @@ export default function App() {
                             )}
 
                           {adminCvTab === "delete" && (
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={() =>
-                                  setCvActionModal({
-                                    show: true,
-                                    cvId: "",
-                                    type: "bulkDeleteCv",
-                                  })
-                                }
-                                disabled={selectedDeleteCvIds.length === 0}
-                                className="flex-1 max-w-xs flex items-center justify-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl text-xs font-black hover:bg-red-700 transition-all shadow-lg uppercase tracking-widest disabled:opacity-50 disabled:grayscale shadow-red-100"
-                              >
-                                <Trash2 size={16} />
-                                Khẳng định Xóa vĩnh viễn (
-                                {selectedDeleteCvIds.length})
-                              </button>
+                            <div className="flex flex-col gap-4 p-4 rounded-2xl bg-red-50 border border-red-100">
+                              <div className="flex flex-wrap items-center gap-4">
+                                <label className="text-xs font-bold text-red-700 uppercase">
+                                  Từ ngày:
+                                </label>
+                                <input
+                                  type="date"
+                                  className="px-3 py-2 bg-white border border-red-200 rounded-xl outline-none focus:ring-2 focus:ring-red-400 text-sm font-bold text-slate-700"
+                                  value={deleteStartDate}
+                                  onChange={(e) =>
+                                    setDeleteStartDate(e.target.value)
+                                  }
+                                />
+                                <label className="text-xs font-bold text-red-700 uppercase">
+                                  Đến ngày:
+                                </label>
+                                <input
+                                  type="date"
+                                  className="px-3 py-2 bg-white border border-red-200 rounded-xl outline-none focus:ring-2 focus:ring-red-400 text-sm font-bold text-slate-700"
+                                  value={deleteEndDate}
+                                  onChange={(e) =>
+                                    setDeleteEndDate(e.target.value)
+                                  }
+                                />
+                                <button
+                                  onClick={() => {
+                                    const currentFilteredIds = getFilteredCVs()
+                                      .filter((cv) => {
+                                        if (!deleteStartDate && !deleteEndDate)
+                                          return true;
+                                        const dateObj = cv.createdAt?.toDate
+                                          ? cv.createdAt.toDate()
+                                          : new Date(cv.createdAt);
+                                        if (deleteStartDate) {
+                                          const sDate = new Date(
+                                            deleteStartDate,
+                                          );
+                                          sDate.setHours(0, 0, 0, 0);
+                                          if (dateObj < sDate) return false;
+                                        }
+                                        if (deleteEndDate) {
+                                          const eDate = new Date(deleteEndDate);
+                                          eDate.setHours(23, 59, 59, 999);
+                                          if (dateObj > eDate) return false;
+                                        }
+                                        return true;
+                                      })
+                                      .map((c) => c.id);
+                                    setSelectedDeleteCvIds(currentFilteredIds);
+                                  }}
+                                  className="px-6 py-2 bg-white border border-red-200 text-red-600 rounded-xl text-xs font-black hover:bg-red-50 transition-all shadow-sm uppercase tracking-widest"
+                                >
+                                  Chọn tất cả theo ngày
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={() =>
+                                    setCvActionModal({
+                                      show: true,
+                                      cvId: "",
+                                      type: "bulkDeleteCv",
+                                    })
+                                  }
+                                  disabled={selectedDeleteCvIds.length === 0}
+                                  className="flex-1 max-w-xs flex items-center justify-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl text-xs font-black hover:bg-red-700 transition-all shadow-lg uppercase tracking-widest disabled:opacity-50 disabled:grayscale shadow-red-100"
+                                >
+                                  <Trash2 size={16} />
+                                  Khẳng định Xóa vĩnh viễn (
+                                  {selectedDeleteCvIds.length})
+                                </button>
+                              </div>
                             </div>
                           )}
 
@@ -5253,7 +5341,9 @@ export default function App() {
                                                     end: course.endDate,
                                                     closingDate:
                                                       course.closingDate,
-                                                    autoAddFromDate: course.autoAddFromDate || "",
+                                                    autoAddFromDate:
+                                                      course.autoAddFromDate ||
+                                                      "",
                                                   });
                                                   setEditingCourseId(course.id);
                                                   setSelectedLearningCvIds(
@@ -5448,7 +5538,7 @@ export default function App() {
                                               );
                                             });
 
-                                            const aoa = [];
+                                            const aoa: any[][] = [];
                                             // Row 0
                                             aoa.push([
                                               `DANH SÁCH ĐĂNG KÝ HỌC ${course.name}`,
@@ -5464,6 +5554,8 @@ export default function App() {
                                               "HDV",
                                               "GROUP HỌC TẬP",
                                               "FACEBOOK",
+                                              "TRẠNG THÁI APP",
+                                              "LÝ DO TỪ CHỐI",
                                               "BUỔI ĐỊNH HÌNH",
                                               "",
                                               "BUỔI 1",
@@ -5490,6 +5582,8 @@ export default function App() {
                                               "",
                                               "",
                                               "",
+                                              "",
+                                              "",
                                               "HỌC",
                                               "HÀNH",
                                               "HỌC",
@@ -5508,58 +5602,67 @@ export default function App() {
 
                                             // Data Rows
                                             sorted
-                                              .filter((c) => c.type !== "reenroll")
+                                              .filter(
+                                                (c) => c.type !== "reenroll",
+                                              )
                                               .forEach((cv, idx) => {
-                                              const track =
-                                                course.tracking?.[cv.id] || {};
-                                              const rowData = [
-                                                idx + 1,
-                                                cv.companion || "",
-                                                cv.studentId || "",
-                                                cv.fullName || "",
-                                                cv.age || "",
-                                                cv.guideName || "",
-                                                cv.studyGroup || "",
-                                                cv.facebookLink
-                                                  ? cv.facebookLink.includes(
-                                                      "http",
-                                                    )
-                                                    ? cv.facebookLink
-                                                    : `https://${cv.facebookLink}`
-                                                  : "",
-                                              ];
+                                                const track =
+                                                  course.tracking?.[cv.id] ||
+                                                  {};
+                                                const rowData = [
+                                                  idx + 1,
+                                                  cv.companion || "",
+                                                  cv.studentId || "",
+                                                  cv.fullName || "",
+                                                  cv.age || "",
+                                                  cv.guideName || "",
+                                                  cv.studyGroup || "",
+                                                  cv.facebookLink
+                                                    ? cv.facebookLink.includes(
+                                                        "http",
+                                                      )
+                                                      ? cv.facebookLink
+                                                      : `https://${cv.facebookLink}`
+                                                    : "",
+                                                  cv.appApproved
+                                                    ? "Đã duyệt"
+                                                    : cv.appRejectedReason
+                                                      ? "Từ chối"
+                                                      : "Chưa duyệt",
+                                                  cv.appRejectedReason || "",
+                                                ];
 
-                                              [
-                                                "buoiDinhHinh",
-                                                "buoi1",
-                                                "buoi2",
-                                                "buoi3",
-                                                "buoi4",
-                                                "buoi5",
-                                                "buoi6",
-                                              ].forEach((b) => {
-                                                rowData.push(
-                                                  track[b]?.hoc ? "✅" : "❌",
-                                                );
-                                                rowData.push(
-                                                  track[b]?.hanh || "🖤",
-                                                );
+                                                [
+                                                  "buoiDinhHinh",
+                                                  "buoi1",
+                                                  "buoi2",
+                                                  "buoi3",
+                                                  "buoi4",
+                                                  "buoi5",
+                                                  "buoi6",
+                                                ].forEach((b) => {
+                                                  rowData.push(
+                                                    track[b]?.hoc ? "✅" : "❌",
+                                                  );
+                                                  rowData.push(
+                                                    track[b]?.hanh || "🖤",
+                                                  );
+                                                });
+
+                                                aoa.push(rowData);
                                               });
-
-                                              aoa.push(rowData);
-                                            });
 
                                             const ws =
                                               XLSX.utils.aoa_to_sheet(aoa);
 
                                             // Styling & Merges
                                             ws["!merges"] = [
-                                              // Row 0 merge over 22 cols
+                                              // Row 0 merge over 24 cols
                                               {
                                                 s: { r: 0, c: 0 },
-                                                e: { r: 0, c: 21 },
+                                                e: { r: 0, c: 23 },
                                               },
-                                              // Row 1 merges down to row 2 for first 8 cols
+                                              // Row 1 merges down to row 2 for first 10 cols
                                               {
                                                 s: { r: 1, c: 0 },
                                                 e: { r: 2, c: 0 },
@@ -5592,11 +5695,15 @@ export default function App() {
                                                 s: { r: 1, c: 7 },
                                                 e: { r: 2, c: 7 },
                                               },
-                                              // Row 1 merges across 2 cols for buoi
                                               {
                                                 s: { r: 1, c: 8 },
-                                                e: { r: 1, c: 9 },
+                                                e: { r: 2, c: 8 },
                                               },
+                                              {
+                                                s: { r: 1, c: 9 },
+                                                e: { r: 2, c: 9 },
+                                              },
+                                              // Row 1 merges across 2 cols for buoi
                                               {
                                                 s: { r: 1, c: 10 },
                                                 e: { r: 1, c: 11 },
@@ -5621,6 +5728,10 @@ export default function App() {
                                                 s: { r: 1, c: 20 },
                                                 e: { r: 1, c: 21 },
                                               },
+                                              {
+                                                s: { r: 1, c: 22 },
+                                                e: { r: 1, c: 23 },
+                                              },
                                             ];
 
                                             const CCE5CC = "CCE5CC";
@@ -5634,7 +5745,7 @@ export default function App() {
                                               R <= aoa.length - 1;
                                               ++R
                                             ) {
-                                              for (let C = 0; C <= 21; ++C) {
+                                              for (let C = 0; C <= 23; ++C) {
                                                 const cellAddress =
                                                   XLSX.utils.encode_cell({
                                                     r: R,
@@ -5657,7 +5768,7 @@ export default function App() {
                                                   if (C <= 2) bgColor = CCE5CC;
                                                   else if (C <= 4)
                                                     bgColor = B3D4FF;
-                                                  else if (C <= 7)
+                                                  else if (C <= 9)
                                                     bgColor = E5CCFF;
                                                   else bgColor = FFE699;
                                                 } else {
@@ -5666,7 +5777,7 @@ export default function App() {
                                                     bgColor = "E8F5E9";
                                                   else if (C <= 4)
                                                     bgColor = "E3F2FD";
-                                                  else if (C <= 7)
+                                                  else if (C <= 9)
                                                     bgColor = "F3E5F5";
                                                   else bgColor = "FFF8E1";
                                                 }
@@ -5717,25 +5828,27 @@ export default function App() {
                                               { wch: 15 }, // HDV
                                               { wch: 18 }, // GROUP HOC TAP
                                               { wch: 12 }, // FACEBOOK
-                                              { wch: 6 },
-                                              { wch: 10 }, // BDH
-                                              { wch: 6 },
-                                              { wch: 10 }, // B1
-                                              { wch: 6 },
-                                              { wch: 10 }, // B2
-                                              { wch: 6 },
-                                              { wch: 10 }, // B3
-                                              { wch: 6 },
-                                              { wch: 10 }, // B4
-                                              { wch: 6 },
-                                              { wch: 10 }, // B5
-                                              { wch: 6 },
-                                              { wch: 10 }, // B6
+                                              { wch: 15 }, // TRANG THAI APP
+                                              { wch: 25 }, // LY DO TU CHOI
+                                              { wch: 6 }, // BDH
+                                              { wch: 10 },
+                                              { wch: 6 }, // B1
+                                              { wch: 10 },
+                                              { wch: 6 }, // B2
+                                              { wch: 10 },
+                                              { wch: 6 }, // B3
+                                              { wch: 10 },
+                                              { wch: 6 }, // B4
+                                              { wch: 10 },
+                                              { wch: 6 }, // B5
+                                              { wch: 10 },
+                                              { wch: 6 }, // B6
+                                              { wch: 10 },
                                             ];
 
                                             const wb = XLSX.utils.book_new();
                                             ws["!autofilter"] = {
-                                              ref: `A2:V${aoa.length}`,
+                                              ref: `A2:X${aoa.length}`,
                                             };
                                             XLSX.utils.book_append_sheet(
                                               wb,
@@ -7062,7 +7175,8 @@ export default function App() {
                                                         <div className="w-px h-6 bg-slate-300"></div>
                                                         <div className="flex items-center gap-3">
                                                           <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                                                            Tem thẻ LT, TH, T.Gian:
+                                                            Tem thẻ LT, TH,
+                                                            T.Gian:
                                                           </span>
                                                           <div className="flex gap-1.5">
                                                             {[
@@ -7311,7 +7425,8 @@ export default function App() {
                                                             <div className="w-px h-6 bg-slate-300"></div>
                                                             <div className="flex items-center gap-3">
                                                               <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-                                                                TEM THẺ LT, TH, T.GIAN:
+                                                                TEM THẺ LT, TH,
+                                                                T.GIAN:
                                                               </span>
                                                               <div className="flex gap-1.5">
                                                                 {[
@@ -7329,11 +7444,14 @@ export default function App() {
                                                                   },
                                                                   {
                                                                     value: "",
-                                                                    label: "Trống",
+                                                                    label:
+                                                                      "Trống",
                                                                   },
                                                                 ].map((opt) => (
                                                                   <button
-                                                                    key={opt.value}
+                                                                    key={
+                                                                      opt.value
+                                                                    }
                                                                     onClick={() =>
                                                                       setTrackingStampHanh(
                                                                         opt.value,
@@ -7341,7 +7459,8 @@ export default function App() {
                                                                     }
                                                                     className={cn(
                                                                       "px-3 py-1.5 rounded-lg text-sm font-bold border transition-all",
-                                                                      trackingStampHanh === opt.value
+                                                                      trackingStampHanh ===
+                                                                        opt.value
                                                                         ? "bg-white border-purple-400 shadow-sm ring-2 ring-purple-100"
                                                                         : "bg-transparent border-transparent hover:bg-slate-200 text-slate-500",
                                                                     )}
@@ -7571,12 +7690,14 @@ export default function App() {
                                                             )}
                                                             className={getColumnClass(
                                                               "guideName",
-                                                              "px-2 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle text-left",
+                                                              "px-1 py-1 border-r border-[#E2E8F0] bg-[#E5CCFF] align-middle text-center",
                                                             )}
                                                             rowSpan={2}
                                                           >
-                                                            <div className="flex items-center justify-start gap-1">
-                                                              HDV
+                                                            <div className="flex flex-col items-center justify-center gap-0.5">
+                                                              <span className="whitespace-normal leading-tight text-center">
+                                                                HƯỚNG DẪN VIÊN
+                                                              </span>
                                                               {renderColumnMenu(
                                                                 "guideName",
                                                               )}
@@ -7929,7 +8050,12 @@ export default function App() {
                                                                 <th className="px-1 py-1 border-r border-t border-[#E2E8F0] bg-[#FFE699]">
                                                                   <div className="flex flex-col items-center gap-1 font-bold">
                                                                     <div className="relative">
-                                                                      <Clock size={16} className="text-amber-600" />
+                                                                      <Clock
+                                                                        size={
+                                                                          16
+                                                                        }
+                                                                        className="text-amber-600"
+                                                                      />
                                                                     </div>
                                                                     {renderHocHanhFilterMenu(
                                                                       b.id,
@@ -8109,8 +8235,7 @@ export default function App() {
                                                                   Array.isArray(
                                                                     fLt,
                                                                   ) &&
-                                                                  fLt.length >
-                                                                    0
+                                                                  fLt.length > 0
                                                                 ) {
                                                                   const strLt =
                                                                     track[sId]
@@ -8150,8 +8275,7 @@ export default function App() {
                                                                   Array.isArray(
                                                                     fTh,
                                                                   ) &&
-                                                                  fTh.length >
-                                                                    0
+                                                                  fTh.length > 0
                                                                 ) {
                                                                   const strTh =
                                                                     track[sId]
@@ -8759,27 +8883,35 @@ export default function App() {
                                                                         </div>
                                                                       )}
                                                                     </td>
-                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
-                                                                        {isAdmin &&
-                                                                        isEditingTracking ? (
-                                                                          <button
-                                                                            onClick={() =>
-                                                                              updateTracking(
-                                                                                b.id,
-                                                                                "timely",
-                                                                                trackingStampHanh,
-                                                                              )
-                                                                            }
-                                                                            className="text-sm w-full h-full min-h-[24px] flex justify-center items-center rounded hover:bg-[#FFE082]"
-                                                                          >
-                                                                            {track[b.id]?.timely || ""}
-                                                                          </button>
-                                                                        ) : (
-                                                                          <div className="text-sm w-full h-full flex justify-center items-center py-1">
-                                                                            {track[b.id]?.timely || ""}
-                                                                          </div>
-                                                                        )}
-                                                                      </td>
+                                                                    <td className="px-1 py-1 border-r border-[#E2E8F0] bg-[#FFF8E1]">
+                                                                      {isAdmin &&
+                                                                      isEditingTracking ? (
+                                                                        <button
+                                                                          onClick={() =>
+                                                                            updateTracking(
+                                                                              b.id,
+                                                                              "timely",
+                                                                              trackingStampHanh,
+                                                                            )
+                                                                          }
+                                                                          className="text-sm w-full h-full min-h-[24px] flex justify-center items-center rounded hover:bg-[#FFE082]"
+                                                                        >
+                                                                          {track[
+                                                                            b.id
+                                                                          ]
+                                                                            ?.timely ||
+                                                                            ""}
+                                                                        </button>
+                                                                      ) : (
+                                                                        <div className="text-sm w-full h-full flex justify-center items-center py-1">
+                                                                          {track[
+                                                                            b.id
+                                                                          ]
+                                                                            ?.timely ||
+                                                                            ""}
+                                                                        </div>
+                                                                      )}
+                                                                    </td>
                                                                   </React.Fragment>
                                                                 ))}
                                                                 {isAdmin &&
@@ -8925,41 +9057,41 @@ export default function App() {
                                                                     ).length;
                                                                   const ltCount =
                                                                     nonNgungCvs.filter(
-                                                                      (cv) =>
-                                                                        course
-                                                                          .tracking?.[
-                                                                          cv.id
-                                                                        ]?.[
-                                                                          b.id
-                                                                        ]
-                                                                          ?.lt &&
-                                                                        course
-                                                                          .tracking?.[
-                                                                          cv.id
-                                                                        ]?.[
-                                                                          b.id
-                                                                        ]
-                                                                          ?.lt !==
-                                                                          "🖤",
+                                                                      (cv) => {
+                                                                        const val =
+                                                                          course
+                                                                            .tracking?.[
+                                                                            cv
+                                                                              .id
+                                                                          ]?.[
+                                                                            b.id
+                                                                          ]?.lt;
+                                                                        return (
+                                                                          val ===
+                                                                            "⭐" ||
+                                                                          val ===
+                                                                            "❤️"
+                                                                        );
+                                                                      },
                                                                     ).length;
                                                                   const thCount =
                                                                     nonNgungCvs.filter(
-                                                                      (cv) =>
-                                                                        course
-                                                                          .tracking?.[
-                                                                          cv.id
-                                                                        ]?.[
-                                                                          b.id
-                                                                        ]
-                                                                          ?.th &&
-                                                                        course
-                                                                          .tracking?.[
-                                                                          cv.id
-                                                                        ]?.[
-                                                                          b.id
-                                                                        ]
-                                                                          ?.th !==
-                                                                          "🖤",
+                                                                      (cv) => {
+                                                                        const val =
+                                                                          course
+                                                                            .tracking?.[
+                                                                            cv
+                                                                              .id
+                                                                          ]?.[
+                                                                            b.id
+                                                                          ]?.th;
+                                                                        return (
+                                                                          val ===
+                                                                            "⭐" ||
+                                                                          val ===
+                                                                            "❤️"
+                                                                        );
+                                                                      },
                                                                     ).length;
                                                                   const timelyCount =
                                                                     nonNgungCvs.filter(
@@ -8970,15 +9102,8 @@ export default function App() {
                                                                         ]?.[
                                                                           b.id
                                                                         ]
-                                                                          ?.timely &&
-                                                                        course
-                                                                          .tracking?.[
-                                                                          cv.id
-                                                                        ]?.[
-                                                                          b.id
-                                                                        ]
-                                                                          ?.timely !==
-                                                                          "🖤",
+                                                                          ?.timely ===
+                                                                        "❤️",
                                                                     ).length;
                                                                   return (
                                                                     <React.Fragment
@@ -9049,16 +9174,362 @@ export default function App() {
                                                                             </div>
                                                                           )}
                                                                       </td>
-                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-blue-700">
-                                                                        {ltCount}
+                                                                      <td
+                                                                        className="relative px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-blue-700 cursor-pointer hover:bg-slate-200"
+                                                                        onClick={(
+                                                                          e,
+                                                                        ) => {
+                                                                          e.stopPropagation();
+                                                                          setActiveTotalMenu(
+                                                                            activeTotalMenu?.lessonId ===
+                                                                              b.id &&
+                                                                              activeTotalMenu?.type ===
+                                                                                "lt"
+                                                                              ? null
+                                                                              : {
+                                                                                  lessonId:
+                                                                                    b.id,
+                                                                                  type: "lt",
+                                                                                },
+                                                                          );
+                                                                        }}
+                                                                      >
+                                                                        {
+                                                                          ltCount
+                                                                        }
+                                                                        {activeTotalMenu?.lessonId ===
+                                                                          b.id &&
+                                                                          activeTotalMenu?.type ===
+                                                                            "lt" && (
+                                                                            <div
+                                                                              className="absolute z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-3 left-1/2 -translate-x-1/2 bottom-full mb-1 text-[11px] text-slate-800 whitespace-nowrap min-w-[120px]"
+                                                                              onClick={(
+                                                                                e,
+                                                                              ) =>
+                                                                                e.stopPropagation()
+                                                                              }
+                                                                            >
+                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    ❤️
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-rose-500">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.lt ===
+                                                                                        "❤️",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    ⭐
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-amber-500">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.lt ===
+                                                                                        "⭐",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                              <div className="flex justify-between gap-4 py-1.5 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    🖤
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-slate-400">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.lt ===
+                                                                                        "🖤",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                            </div>
+                                                                          )}
                                                                       </td>
-                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-purple-700">
-                                                                        {thCount}
+                                                                      <td
+                                                                        className="relative px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-purple-700 cursor-pointer hover:bg-slate-200"
+                                                                        onClick={(
+                                                                          e,
+                                                                        ) => {
+                                                                          e.stopPropagation();
+                                                                          setActiveTotalMenu(
+                                                                            activeTotalMenu?.lessonId ===
+                                                                              b.id &&
+                                                                              activeTotalMenu?.type ===
+                                                                                "th"
+                                                                              ? null
+                                                                              : {
+                                                                                  lessonId:
+                                                                                    b.id,
+                                                                                  type: "th",
+                                                                                },
+                                                                          );
+                                                                        }}
+                                                                      >
+                                                                        {
+                                                                          thCount
+                                                                        }
+                                                                        {activeTotalMenu?.lessonId ===
+                                                                          b.id &&
+                                                                          activeTotalMenu?.type ===
+                                                                            "th" && (
+                                                                            <div
+                                                                              className="absolute z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-3 left-1/2 -translate-x-1/2 bottom-full mb-1 text-[11px] text-slate-800 whitespace-nowrap min-w-[120px]"
+                                                                              onClick={(
+                                                                                e,
+                                                                              ) =>
+                                                                                e.stopPropagation()
+                                                                              }
+                                                                            >
+                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    ❤️
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-rose-500">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.th ===
+                                                                                        "❤️",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    ⭐
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-amber-500">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.th ===
+                                                                                        "⭐",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                              <div className="flex justify-between gap-4 py-1.5 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    🖤
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-slate-400">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.th ===
+                                                                                        "🖤",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                            </div>
+                                                                          )}
                                                                       </td>
-                                                                      <td className="px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-slate-600">
+                                                                      <td
+                                                                        className="relative px-1 py-1 border-r border-[#E2E8F0] text-center bg-[#E2E8F0] text-slate-600 cursor-pointer hover:bg-slate-200"
+                                                                        onClick={(
+                                                                          e,
+                                                                        ) => {
+                                                                          e.stopPropagation();
+                                                                          setActiveTotalMenu(
+                                                                            activeTotalMenu?.lessonId ===
+                                                                              b.id &&
+                                                                              activeTotalMenu?.type ===
+                                                                                "timely"
+                                                                              ? null
+                                                                              : {
+                                                                                  lessonId:
+                                                                                    b.id,
+                                                                                  type: "timely",
+                                                                                },
+                                                                          );
+                                                                        }}
+                                                                      >
                                                                         {
                                                                           timelyCount
                                                                         }
+                                                                        {activeTotalMenu?.lessonId ===
+                                                                          b.id &&
+                                                                          activeTotalMenu?.type ===
+                                                                            "timely" && (
+                                                                            <div
+                                                                              className="absolute z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-3 left-1/2 -translate-x-1/2 bottom-full mb-1 text-[11px] text-slate-800 whitespace-nowrap min-w-[120px]"
+                                                                              onClick={(
+                                                                                e,
+                                                                              ) =>
+                                                                                e.stopPropagation()
+                                                                              }
+                                                                            >
+                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    ❤️
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-rose-500">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.timely ===
+                                                                                        "❤️",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                              <div className="flex justify-between gap-4 py-1.5 border-b border-slate-100 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    ⭐
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-amber-500">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.timely ===
+                                                                                        "⭐",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                              <div className="flex justify-between gap-4 py-1.5 items-center">
+                                                                                <span className="flex items-center gap-1.5">
+                                                                                  <span className="text-sm">
+                                                                                    🖤
+                                                                                  </span>
+                                                                                </span>
+                                                                                <span className="font-black text-slate-400">
+                                                                                  {
+                                                                                    nonNgungCvs.filter(
+                                                                                      (
+                                                                                        cv,
+                                                                                      ) =>
+                                                                                        course
+                                                                                          .tracking?.[
+                                                                                          cv
+                                                                                            .id
+                                                                                        ]?.[
+                                                                                          b
+                                                                                            .id
+                                                                                        ]
+                                                                                          ?.timely ===
+                                                                                        "🖤",
+                                                                                    )
+                                                                                      .length
+                                                                                  }
+                                                                                </span>
+                                                                              </div>
+                                                                            </div>
+                                                                          )}
                                                                       </td>
                                                                     </React.Fragment>
                                                                   );
@@ -10290,6 +10761,7 @@ export default function App() {
                                                                                           {
                                                                                             cv.studentId
                                                                                           }
+
                                                                                           )
                                                                                         </span>
                                                                                       )}
@@ -10302,6 +10774,7 @@ export default function App() {
                                                                                           {
                                                                                             cv.previousCourse
                                                                                           }
+
                                                                                           )
                                                                                         </span>
                                                                                       )}
@@ -11934,12 +12407,16 @@ export default function App() {
                       Chọn Giờ
                     </label>
                     {isFetchingEditSlots ? (
-                       <p className="text-xs text-slate-500 font-medium pb-2 px-1">Đang tải...</p>
-                    ) : (manageEditSlots.length === 0 ? (
-                       <p className="text-xs text-red-500 font-medium pb-2 px-1">Không có giờ trống trong ngày này.</p>
+                      <p className="text-xs text-slate-500 font-medium pb-2 px-1">
+                        Đang tải...
+                      </p>
+                    ) : manageEditSlots.length === 0 ? (
+                      <p className="text-xs text-red-500 font-medium pb-2 px-1">
+                        Không có giờ trống trong ngày này.
+                      </p>
                     ) : (
                       <div className="grid grid-cols-4 gap-2">
-                        {manageEditSlots.map(s => (
+                        {manageEditSlots.map((s) => (
                           <button
                             key={s}
                             onClick={() => setManageEditTime(s)}
@@ -11947,16 +12424,16 @@ export default function App() {
                               "py-2 rounded-xl text-sm font-bold border transition-all",
                               manageEditTime === s
                                 ? "bg-yellow-400 border-yellow-400 text-amber-950 shadow-sm"
-                                : "bg-white border-slate-200 text-slate-600 hover:border-yellow-400"
+                                : "bg-white border-slate-200 text-slate-600 hover:border-yellow-400",
                             )}
                           >
                             {s}
                           </button>
                         ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 inline-flex items-center gap-1.5">
                       <MessageSquare size={12} className="text-yellow-600" />
@@ -11981,7 +12458,12 @@ export default function App() {
                     </button>
                     <button
                       onClick={onSaveManageEditTime}
-                      disabled={isManaging || !manageEditDateStr || !manageEditTime || isFetchingEditSlots}
+                      disabled={
+                        isManaging ||
+                        !manageEditDateStr ||
+                        !manageEditTime ||
+                        isFetchingEditSlots
+                      }
                       className="flex-1 py-4 bg-yellow-400 text-amber-950 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-yellow-200 hover:bg-yellow-300 transition-all active:scale-[0.98] disabled:opacity-40"
                     >
                       {isManaging ? "Đang lưu..." : "Xác nhận"}
@@ -11994,201 +12476,209 @@ export default function App() {
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                       Chi tiết
                     </p>
-                <p className="text-sm font-semibold text-slate-700">
-                  {manageAppointment.date} Lúc {manageAppointment.startTime}
-                </p>
-                <div className="pt-2 border-t border-slate-200/50 mt-2 space-y-1">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">
-                    Học viên
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    {manageAppointment.clientName}
-                  </p>
+                    <p className="text-sm font-semibold text-slate-700">
+                      {manageAppointment.date} Lúc {manageAppointment.startTime}
+                    </p>
+                    <div className="pt-2 border-t border-slate-200/50 mt-2 space-y-1">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">
+                        Học viên
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {manageAppointment.clientName}
+                      </p>
 
-                  {manageAppointment.status === "cancelled" && (
-                    <div className="bg-red-50 p-2 rounded-lg border border-red-100 mt-2">
-                      <p className="text-[10px] text-red-400 font-bold uppercase">
-                        Trạng thái: Bận đột xuất / Đã hủy
-                      </p>
-                      <p className="text-xs text-red-600 italic font-medium">
-                        Lý do:{" "}
-                        {manageAppointment.cancellationReason ||
-                          "Không rõ lý do"}
-                      </p>
-                    </div>
-                  )}
-
-                  {(manageAppointment as any).timeEditedByAdmin && (
-                    <div className="bg-yellow-50 p-2 rounded-lg border border-yellow-100 mt-2">
-                      <p className="text-[10px] text-yellow-600 font-bold uppercase">
-                        Đã được Đổi Giờ (bởi Admin)
-                      </p>
-                      {(manageAppointment as any).timeEditReason && (
-                        <p className="text-xs text-yellow-700 italic font-medium">
-                          Lý do: {(manageAppointment as any).timeEditReason}
-                        </p>
+                      {manageAppointment.status === "cancelled" && (
+                        <div className="bg-red-50 p-2 rounded-lg border border-red-100 mt-2">
+                          <p className="text-[10px] text-red-400 font-bold uppercase">
+                            Trạng thái: Bận đột xuất / Đã hủy
+                          </p>
+                          <p className="text-xs text-red-600 italic font-medium">
+                            Lý do:{" "}
+                            {manageAppointment.cancellationReason ||
+                              "Không rõ lý do"}
+                          </p>
+                        </div>
                       )}
-                    </div>
-                  )}
 
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-2">
-                    Hướng dẫn viên
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    {manageAppointment.guide}
-                  </p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-2">
-                    Câu hỏi
-                  </p>
-                  <p className="text-sm text-slate-600 italic">
-                    "{manageAppointment.question}"
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-5">
-                {manageAppointment.status === "active" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between ml-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                        Xác minh bằng Mã PIN bạn đã tạo
-                      </label>
-                      {isAdmin && (
-                        <span className="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100 uppercase tracking-tighter">
-                          Quyền Admin
-                        </span>
+                      {(manageAppointment as any).timeEditedByAdmin && (
+                        <div className="bg-yellow-50 p-2 rounded-lg border border-yellow-100 mt-2">
+                          <p className="text-[10px] text-yellow-600 font-bold uppercase">
+                            Đã được Đổi Giờ (bởi Admin)
+                          </p>
+                          {(manageAppointment as any).timeEditReason && (
+                            <p className="text-xs text-yellow-700 italic font-medium">
+                              Lý do: {(manageAppointment as any).timeEditReason}
+                            </p>
+                          )}
+                        </div>
                       )}
-                    </div>
 
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                        <Lock size={14} />
-                      </div>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={managePassword}
-                        onChange={(e) => setManagePassword(e.target.value)}
-                        placeholder={
-                          isAdmin
-                            ? "Đã xác minh Quyền Admin"
-                            : "Nhập Mã PIN đã tạo..."
-                        }
-                        disabled={isAdmin}
-                        className={cn(
-                          "w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-yellow-400 focus:bg-white transition-all outline-none text-sm font-bold tracking-widest placeholder:tracking-normal placeholder:font-medium",
-                          isAdmin &&
-                            "opacity-60 border-slate-100 bg-slate-50/50 cursor-not-allowed",
-                        )}
-                      />
+                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-2">
+                        Hướng dẫn viên
+                      </p>
+                      <p className="text-sm text-slate-600">
+                        {manageAppointment.guide}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase mt-2">
+                        Câu hỏi
+                      </p>
+                      <p className="text-sm text-slate-600 italic">
+                        "{manageAppointment.question}"
+                      </p>
                     </div>
                   </div>
-                )}
 
-                {isAdmin && manageAppointment.status === "active" && (
-                  <div className="space-y-4">
-                    <div
-                      className="flex items-center gap-3 p-4 bg-yellow-50 rounded-2xl border border-yellow-100 cursor-pointer transition-all hover:bg-yellow-100/50"
-                      onClick={() => setIsSuddenCancel(!isSuddenCancel)}
-                    >
-                      <div
-                        className={cn(
-                          "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all",
-                          isSuddenCancel
-                            ? "bg-amber-950 border-amber-950 text-white"
-                            : "bg-white border-slate-300",
-                        )}
-                      >
-                        {isSuddenCancel && <CheckCircle2 size={14} />}
+                  <div className="space-y-5">
+                    {manageAppointment.status === "active" && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between ml-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            Xác minh bằng Mã PIN bạn đã tạo
+                          </label>
+                          {isAdmin && (
+                            <span className="text-[9px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100 uppercase tracking-tighter">
+                              Quyền Admin
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                            <Lock size={14} />
+                          </div>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={managePassword}
+                            onChange={(e) => setManagePassword(e.target.value)}
+                            placeholder={
+                              isAdmin
+                                ? "Đã xác minh Quyền Admin"
+                                : "Nhập Mã PIN đã tạo..."
+                            }
+                            disabled={isAdmin}
+                            className={cn(
+                              "w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:border-yellow-400 focus:bg-white transition-all outline-none text-sm font-bold tracking-widest placeholder:tracking-normal placeholder:font-medium",
+                              isAdmin &&
+                                "opacity-60 border-slate-100 bg-slate-50/50 cursor-not-allowed",
+                            )}
+                          />
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-[11px] font-black text-amber-950 uppercase tracking-tight">
-                          Hủy lịch đột xuất
-                        </p>
-                        <p className="text-[9px] text-amber-800 font-medium tracking-tight">
-                          Khung giờ này sẽ bị khóa và hiển thị "Bận đột xuất"
-                        </p>
-                      </div>
-                    </div>
+                    )}
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 inline-flex items-center gap-1.5">
-                        <MessageSquare size={12} className="text-yellow-600" />
-                        Lý do hủy {isSuddenCancel ? "đột xuất" : ""}
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={adminReason}
-                        onChange={(e) => setAdminReason(e.target.value)}
-                        placeholder={
-                          isSuddenCancel
-                            ? "Nhập lý do (vd: Có việc bận đột xuất...)"
-                            : "Nhập lý do (vd: Thông tin Học viên không chính xác...)"
-                        }
-                        className="w-full px-4 py-3 bg-red-50/30 border border-red-100 rounded-2xl focus:ring-2 focus:ring-red-400 focus:bg-white transition-all outline-none text-sm font-medium placeholder:text-slate-300 resize-none italic"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-2">
-                  {manageAppointment.status === "active" ? (
-                    <>
-                      {isAdmin && (
-                        <button
-                          onClick={handleEditManageTimeSetup}
-                          disabled={isManaging}
-                          className="flex-1 py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-[0.98] disabled:opacity-40"
+                    {isAdmin && manageAppointment.status === "active" && (
+                      <div className="space-y-4">
+                        <div
+                          className="flex items-center gap-3 p-4 bg-yellow-50 rounded-2xl border border-yellow-100 cursor-pointer transition-all hover:bg-yellow-100/50"
+                          onClick={() => setIsSuddenCancel(!isSuddenCancel)}
                         >
-                          Đổi Giờ
+                          <div
+                            className={cn(
+                              "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all",
+                              isSuddenCancel
+                                ? "bg-amber-950 border-amber-950 text-white"
+                                : "bg-white border-slate-300",
+                            )}
+                          >
+                            {isSuddenCancel && <CheckCircle2 size={14} />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-[11px] font-black text-amber-950 uppercase tracking-tight">
+                              Hủy lịch đột xuất
+                            </p>
+                            <p className="text-[9px] text-amber-800 font-medium tracking-tight">
+                              Khung giờ này sẽ bị khóa và hiển thị "Bận đột
+                              xuất"
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 inline-flex items-center gap-1.5">
+                            <MessageSquare
+                              size={12}
+                              className="text-yellow-600"
+                            />
+                            Lý do hủy {isSuddenCancel ? "đột xuất" : ""}
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={adminReason}
+                            onChange={(e) => setAdminReason(e.target.value)}
+                            placeholder={
+                              isSuddenCancel
+                                ? "Nhập lý do (vd: Có việc bận đột xuất...)"
+                                : "Nhập lý do (vd: Thông tin Học viên không chính xác...)"
+                            }
+                            className="w-full px-4 py-3 bg-red-50/30 border border-red-100 rounded-2xl focus:ring-2 focus:ring-red-400 focus:bg-white transition-all outline-none text-sm font-medium placeholder:text-slate-300 resize-none italic"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-3 pt-2">
+                      {manageAppointment.status === "active" ? (
+                        <>
+                          {isAdmin && (
+                            <button
+                              onClick={handleEditManageTimeSetup}
+                              disabled={isManaging}
+                              className="flex-1 py-4 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-[0.98] disabled:opacity-40"
+                            >
+                              Đổi Giờ
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleCancelAppointment(false)}
+                            disabled={
+                              isManaging || (!isAdmin && !managePassword)
+                            }
+                            className={cn(
+                              "flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-200 hover:bg-red-600 transition-all active:scale-[0.98] disabled:opacity-40",
+                              isAdmin && "bg-amber-950 shadow-amber-950/20",
+                            )}
+                          >
+                            {isManaging
+                              ? "Đang hủy..."
+                              : isAdmin
+                                ? "Hủy (Lưu lại)"
+                                : "Xác nhận hủy"}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleRestoreAppointment()}
+                          disabled={isManaging || !isAdmin}
+                          className="flex-1 py-4 bg-yellow-400 text-amber-950 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-yellow-200 hover:bg-yellow-300 transition-all active:scale-[0.98] disabled:opacity-40"
+                        >
+                          {isManaging
+                            ? "Đang khôi phục..."
+                            : "Khôi phục lịch hẹn"}
                         </button>
                       )}
-                      <button
-                        onClick={() => handleCancelAppointment(false)}
-                        disabled={isManaging || (!isAdmin && !managePassword)}
-                        className={cn(
-                          "flex-1 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-200 hover:bg-red-600 transition-all active:scale-[0.98] disabled:opacity-40",
-                          isAdmin && "bg-amber-950 shadow-amber-950/20",
-                        )}
-                      >
-                        {isManaging
-                          ? "Đang hủy..."
-                          : isAdmin
-                            ? "Hủy (Lưu lại)"
-                            : "Xác nhận hủy"}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => handleRestoreAppointment()}
-                      disabled={isManaging || !isAdmin}
-                      className="flex-1 py-4 bg-yellow-400 text-amber-950 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-yellow-200 hover:bg-yellow-300 transition-all active:scale-[0.98] disabled:opacity-40"
-                    >
-                      {isManaging ? "Đang khôi phục..." : "Khôi phục lịch hẹn"}
-                    </button>
-                  )}
 
-                  {isAdmin && (
-                    <button
-                      onClick={() => {
-                        if (
-                          confirm(
-                            "Xóa vĩnh viễn dữ liệu này? Hành động không thể hoàn tác.",
-                          )
-                        ) {
-                          handleCancelAppointment(true);
-                        }
-                      }}
-                      disabled={isManaging}
-                      className="w-14 items-center justify-center flex bg-red-600 text-white rounded-2xl font-bold shadow-xl shadow-red-900/20 hover:bg-red-700 transition-all active:scale-[0.98]"
-                      title="Xóa vĩnh viễn"
-                    >
-                      <Trash2 size={20} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              </>
+                      {isAdmin && (
+                        <button
+                          onClick={() => {
+                            if (
+                              confirm(
+                                "Xóa vĩnh viễn dữ liệu này? Hành động không thể hoàn tác.",
+                              )
+                            ) {
+                              handleCancelAppointment(true);
+                            }
+                          }}
+                          disabled={isManaging}
+                          className="w-14 items-center justify-center flex bg-red-600 text-white rounded-2xl font-bold shadow-xl shadow-red-900/20 hover:bg-red-700 transition-all active:scale-[0.98]"
+                          title="Xóa vĩnh viễn"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
             </motion.div>
           </div>
@@ -12685,8 +13175,14 @@ export default function App() {
 
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mt-4">
                 <div className="mb-4">
-                  <h3 className="text-sm font-bold text-slate-800">Tự động thêm CV vào danh sách</h3>
-                  <p className="text-xs font-medium text-slate-500">Tự động đẩy học viên mới vào group khi đăng ký thành công nếu thời gian nộp CV của họ nằm sau ngày bên dưới và trước ngày chốt danh sách.</p>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Tự động thêm CV vào danh sách
+                  </h3>
+                  <p className="text-xs font-medium text-slate-500">
+                    Tự động đẩy học viên mới vào group khi đăng ký thành công
+                    nếu thời gian nộp CV của họ nằm sau ngày bên dưới và trước
+                    ngày chốt danh sách.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
@@ -12861,7 +13357,8 @@ export default function App() {
                                 endDate: courseForm.end,
                                 closingDate: courseForm.closingDate,
                                 studentIds: selectedLearningCvIds,
-                                autoAddFromDate: courseForm.autoAddFromDate || deleteField(),
+                                autoAddFromDate:
+                                  courseForm.autoAddFromDate || deleteField(),
                                 removedStudentIds: [
                                   ...(course.removedStudentIds || []),
                                   ...removedIds,
@@ -12883,7 +13380,8 @@ export default function App() {
                           endDate: courseForm.end,
                           closingDate: courseForm.closingDate,
                           studentIds: selectedLearningCvIds,
-                          autoAddFromDate: courseForm.autoAddFromDate || deleteField(),
+                          autoAddFromDate:
+                            courseForm.autoAddFromDate || deleteField(),
                         });
                         setChromeAlert("Đã cập nhật khóa học!");
                       } else {
