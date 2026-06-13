@@ -171,6 +171,8 @@ interface CV {
   createdAt: any;
   processedAt?: any;
   processedBy?: string;
+  isDeleted?: boolean;
+  cancellationReason?: string;
   appApproved?: boolean;
   appApprovedBy?: string;
   appApprovedAt?: any;
@@ -1355,6 +1357,7 @@ export default function App() {
 
       const foundDocs = querySnapshot.docs.filter((doc) => {
         const data = doc.data();
+        if (data.isDeleted) return false;
         const dbPhone = data.phone ? String(data.phone).replace(/\D/g, "") : "";
         const dbPhoneLast4 = data.phoneLast4
           ? String(data.phoneLast4).trim()
@@ -1799,7 +1802,7 @@ export default function App() {
         setChromeAlert("Đã bật Chế độ Xóa CV.");
       } else if (cvActionModal.type === "bulkDeleteCv") {
         for (const cvId of selectedDeleteCvIds) {
-          await deleteDoc(doc(db, "cvs", cvId));
+          await updateDoc(doc(db, "cvs", cvId), { isDeleted: true });
         }
         setChromeAlert(`Đã xóa thành công ${selectedDeleteCvIds.length} CV.`);
         setSelectedDeleteCvIds([]);
@@ -1922,6 +1925,8 @@ export default function App() {
     }
 
     return filtered.filter((c) => {
+      if (c.isDeleted && adminCvTab !== "learning") return false;
+
       if (adminCvTab === "learning") return true;
 
       // Tab filtering
@@ -1945,6 +1950,12 @@ export default function App() {
     const { utils, writeFile } = await import("xlsx");
 
     let filteredData = cvs;
+
+    // Always exclude deleted CVs unless we are in the learning tab
+    filteredData = filteredData.filter((c) => {
+      if (c.isDeleted && adminCvTab !== "learning") return false;
+      return true;
+    });
 
     // Always exclude re-enroll CVs for these exports as requested
     filteredData = filteredData.filter((c) => c.type !== "reenroll");
@@ -4325,7 +4336,7 @@ export default function App() {
                                   className="flex-1 max-w-xs flex items-center justify-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl text-xs font-black hover:bg-red-700 transition-all shadow-lg uppercase tracking-widest disabled:opacity-50 disabled:grayscale shadow-red-100"
                                 >
                                   <Trash2 size={16} />
-                                  Khẳng định Xóa vĩnh viễn (
+                                  Xóa CV (Giữ KQ Học) (
                                   {selectedDeleteCvIds.length})
                                 </button>
                               </div>
@@ -4640,7 +4651,14 @@ export default function App() {
                                             }}
                                           />
                                         )}
-                                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 pl-2 text-left items-start w-full">
+                                      <div
+                                        className={cn(
+                                          "flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6 pl-2 text-left items-start w-full",
+                                          statusSubFilter === "rejected"
+                                            ? "lg:grid-cols-6"
+                                            : "lg:grid-cols-5",
+                                        )}
+                                      >
                                         <div>
                                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
                                             Học viên
@@ -5082,6 +5100,29 @@ export default function App() {
                                             )}
                                           </div>
                                         </div>
+
+                                        {statusSubFilter === "rejected" && (
+                                          <div className="flex flex-col gap-2">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                                              Lý do / Xóa CV
+                                            </p>
+                                            <div className="text-[11px] font-medium text-slate-600 bg-slate-50 border border-slate-100 rounded-xl p-2 min-h-[50px] whitespace-pre-wrap flex-1">
+                                              {cv.appRejectedReason ||
+                                                cv.cancellationReason ||
+                                                (cv.isDeleted ? (
+                                                  <span className="italic text-red-500 font-bold">
+                                                    Bị xóa với lý do:{" "}
+                                                    {cv.cancellationReason ||
+                                                      "Không có"}
+                                                  </span>
+                                                ) : (
+                                                  <span className="italic text-slate-300">
+                                                    Không có
+                                                  </span>
+                                                ))}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -11218,7 +11259,8 @@ export default function App() {
                 {cvActionModal.type === "bulkDeleteCv" ? (
                   <div className="space-y-6">
                     <p className="text-center text-slate-600 font-medium py-4">
-                      Bạn muốn xác nhận xóa vĩnh viễn không?
+                      Bạn muốn xác nhận xóa không? (Dữ liệu học tập vẫn được giữ
+                      lại)
                     </p>
                     <div className="flex items-center gap-4">
                       <button
